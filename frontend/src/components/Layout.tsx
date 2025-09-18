@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 // Itens do menu com todas as páginas
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-  { href: "/cadastro", icon: PlusCircle, label: "Novo Atendimento" },
+  { href: "/cadastro", icon: PlusCircle, label: "Coleta de Dados" },
   { href: "/consulta", icon: Search, label: "Consultar Caso" },
   { href: "/painel-vigilancia", icon: BarChart3, label: "Painel de Vigilância" },
   { href: "/relatorios", icon: FileText, label: "Relatórios" },

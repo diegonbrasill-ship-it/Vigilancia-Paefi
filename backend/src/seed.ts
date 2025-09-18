@@ -1,31 +1,37 @@
-import { openDb } from "./db";
-import bcrypt from "bcrypt";
+// backend/src/seed.ts
+import { initDb } from "./db";
+import bcrypt from "bcryptjs"; // use o mesmo bcryptjs que está no db.ts
 
 async function seed() {
-  const db = await openDb();
+  const pool = await initDb(); // garante criação das tabelas e seed inicial
+  const client = await pool.connect();
 
-  await db.exec(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT UNIQUE,
-      password TEXT,
-      role TEXT
-    );
-  `);
+  try {
+    // Usuário coordenador adicional (exemplo)
+    const username = "coordenador";
+    const password = "senha123";
+    const role = "coordenador";
 
-  const hash = await bcrypt.hash("senha123", 10);
+    // Verifica se já existe
+    const res = await client.query("SELECT id FROM users WHERE username = $1", [username]);
 
-  // Inserir usuário se não existir
-  await db.run(
-    `INSERT OR IGNORE INTO users (username, password, role) VALUES (?, ?, ?)`,
-    ["coordenador", hash, "coordenador"]
-  );
-
-  console.log("✅ Banco populado (usuário: coordenador / senha123)");
-  process.exit(0);
+    if (res.rowCount === 0) {
+      const hash = await bcrypt.hash(password, 10);
+      await client.query(
+        `INSERT INTO users (username, passwordHash, role) VALUES ($1, $2, $3)`,
+        [username, hash, role]
+      );
+      console.log(`✅ Usuário '${username}' criado.`);
+    } else {
+      console.log(`ℹ️ Usuário '${username}' já existe, não será recriado.`);
+    }
+  } catch (err) {
+    console.error("❌ Erro no seed:", err);
+  } finally {
+    client.release();
+    process.exit(0);
+  }
 }
 
-seed().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+seed();
+
