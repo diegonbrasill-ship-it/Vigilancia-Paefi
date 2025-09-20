@@ -1,15 +1,14 @@
-//
-// ARQUIVO CORRIGIDO: /src/components/vigilancia/MapaCalor.tsx
-//
 import React from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import './MapaCalor.css';
 
+// ATUALIZADO: Adicionamos a nova propriedade 'onMarkerClick'
 interface MapaCalorProps {
   data: Array<{
     bairro: string;
     casos: number;
   }>;
+  onMarkerClick?: (bairro: string) => void; // Função que será chamada ao clicar em um marcador
 }
 
 const coordenadasBairros: { [key: string]: [number, number] } = {
@@ -28,14 +27,10 @@ const getColor = (casos: number) => {
     return '#abdda4';
 };
 
-const MapaCalor: React.FC<MapaCalorProps> = ({ data }) => {
+const MapaCalor: React.FC<MapaCalorProps> = ({ data, onMarkerClick }) => {
   const centroMapa: [number, number] = [-7.025, -37.280];
 
-  // --- A CORREÇÃO ESTÁ AQUI ---
-  // Antes de tentar usar o .map(), verificamos se 'data' é de fato um array.
   if (!Array.isArray(data)) {
-    // Se não for um array, não podemos continuar.
-    // Mostramos uma mensagem de erro amigável em vez de quebrar a página inteira.
     console.error("Componente MapaCalor recebeu 'data' que não é um array:", data);
     return (
       <div className="mapa-container mapa-error">
@@ -43,7 +38,6 @@ const MapaCalor: React.FC<MapaCalorProps> = ({ data }) => {
       </div>
     );
   }
-  // Se a verificação passar, o código continua normalmente.
 
   return (
     <div className="mapa-container">
@@ -52,7 +46,7 @@ const MapaCalor: React.FC<MapaCalorProps> = ({ data }) => {
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
-        {data.map(item => { // Agora esta linha é segura
+        {data.map(item => {
           const position = coordenadasBairros[item.bairro];
           if (position) {
             return (
@@ -65,6 +59,14 @@ const MapaCalor: React.FC<MapaCalorProps> = ({ data }) => {
                   fillColor: getColor(item.casos),
                   fillOpacity: 0.7,
                   weight: 1,
+                }}
+                // ATUALIZADO: Adicionamos o manipulador de eventos de clique
+                eventHandlers={{
+                  click: () => {
+                    if (onMarkerClick) {
+                      onMarkerClick(item.bairro);
+                    }
+                  },
                 }}
               >
                 <Popup>

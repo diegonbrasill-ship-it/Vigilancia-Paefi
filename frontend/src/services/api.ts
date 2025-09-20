@@ -243,6 +243,38 @@ export async function createUser(data: { username: string; password: string; rol
     return res.json();
 }
 
+// =======================================================================
+// NOVA FUNÇÃO ADICIONADA PARA O DRILL-DOWN
+// =======================================================================
+interface FiltrosCasos {
+    filtro?: string;
+    valor?: string;
+    tecRef?: string;
+}
+
+export async function getCasosFiltrados(filters?: FiltrosCasos): Promise<any[]> {
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('Usuário não autenticado.');
+
+    const params = new URLSearchParams();
+    if (filters) {
+        if (filters.filtro) params.append('filtro', filters.filtro);
+        if (filters.valor) params.append('valor', filters.valor);
+        if (filters.tecRef) params.append('tecRef', filters.tecRef);
+    }
+    const queryString = params.toString();
+
+    const res = await fetch(`${API_BASE_URL}/api/casos?${queryString}`, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Erro ao buscar casos filtrados');
+    return data;
+}
+
+
 // --- FUNÇÕES DO DASHBOARD ---
 const buildUrlWithFilters = (baseUrl: string, filters?: { mes?: string }) => {
     const url = new URL(baseUrl);
@@ -323,33 +355,11 @@ export async function getVigilanciaTaxaReincidencia(): Promise<{ taxaReincidenci
     return res.json();
 }
 
-// =======================================================================
-// ADIÇÃO DA NOVA FUNÇÃO PARA BUSCAR CASOS COM FILTROS AVANÇADOS
-// =======================================================================
-interface FiltrosCasos {
-    filtro?: string;
-    valor?: string;
-    tecRef?: string;
-}
-
-export async function getCasosFiltrados(filters?: FiltrosCasos): Promise<any[]> {
+// ADIÇÃO DA ÚLTIMA FUNÇÃO QUE FALTAVA PARA O PAINEL DE VIGILÂNCIA
+export async function getVigilanciaPerfilViolacoes(): Promise<{ tipo: string; quantidade: number }[]> {
     const token = localStorage.getItem('token');
     if (!token) throw new Error('Usuário não autenticado.');
-
-    const params = new URLSearchParams();
-    if (filters) {
-        if (filters.filtro) params.append('filtro', filters.filtro);
-        if (filters.valor) params.append('valor', filters.valor);
-        if (filters.tecRef) params.append('tecRef', filters.tecRef);
-    }
-    const queryString = params.toString();
-
-    const res = await fetch(`${API_BASE_URL}/api/casos?${queryString}`, {
-        method: 'GET',
-        headers: { 'Authorization': `Bearer ${token}` },
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.message || 'Erro ao buscar casos filtrados');
-    return data;
+    const res = await fetch(`${API_BASE_URL}/api/vigilancia/perfil-violacoes`, { headers: { 'Authorization': `Bearer ${token}` } });
+    if (!res.ok) { const data = await res.json(); throw new Error(data.message || 'Erro ao buscar perfil de violações'); }
+    return res.json();
 }

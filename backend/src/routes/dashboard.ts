@@ -80,7 +80,12 @@ router.get("/novos-no-mes", authMiddleware, (req, res) => executeCountQuery(req,
 router.get("/inseridos-paefi", authMiddleware, (req, res) => executeCountQuery(req, res, "inseridosPAEFI", `SELECT COUNT(id) AS total FROM casos WHERE dados_completos->>'inseridoPAEFI' = 'Sim'`));
 router.get("/casos-reincidentes", authMiddleware, (req, res) => executeCountQuery(req, res, "reincidentes", `SELECT COUNT(id) AS total FROM casos WHERE dados_completos->>'reincidente' = 'Sim'`));
 router.get("/recebem-bolsa-familia", authMiddleware, (req, res) => executeCountQuery(req, res, "recebemBolsaFamilia", `SELECT COUNT(id) AS total FROM casos WHERE dados_completos->>'recebePBF' = 'Sim'`));
-router.get("/recebem-bpc", authMiddleware, (req, res) => executeCountQuery(req, res, "recebemBPC", `SELECT COUNT(id) AS total FROM casos WHERE dados_completos->>'recebeBPC' <> 'NÃO' AND dados_completos->>'recebeBPC' IS NOT NULL`));
+
+// =======================================================================
+// CORREÇÃO APLICADA AQUI: A query agora busca apenas pelos valores explícitos 'Idoso' ou 'PCD'.
+// =======================================================================
+router.get("/recebem-bpc", authMiddleware, (req, res) => executeCountQuery(req, res, "recebemBPC", `SELECT COUNT(id) AS total FROM casos WHERE dados_completos->>'recebeBPC' IN ('Idoso', 'PCD')`));
+
 router.get("/violencia-confirmada", authMiddleware, (req, res) => executeCountQuery(req, res, "violenciaConfirmada", `SELECT COUNT(id) AS total FROM casos WHERE dados_completos->>'confirmacaoViolencia' = 'Confirmada'`));
 router.get("/notificados-sinan", authMiddleware, (req, res) => executeCountQuery(req, res, "notificadosSINAN", `SELECT COUNT(id) AS total FROM casos WHERE dados_completos->>'notificacaoSINAM' = 'Sim'`));
 router.get("/contexto-familiar", authMiddleware, async (req, res) => {

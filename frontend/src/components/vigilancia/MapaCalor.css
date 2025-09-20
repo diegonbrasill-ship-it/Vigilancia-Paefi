@@ -20,3 +20,8 @@
   color: #6c757d;
   font-style: italic;
 }
+/* Adicione isto ao final do seu arquivo MapaCalor.css */
+
+.leaflet-interactive {
+  cursor: pointer;
+}
