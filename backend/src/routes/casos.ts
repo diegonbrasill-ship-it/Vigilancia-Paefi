@@ -7,6 +7,50 @@ import { logAction } from "../services/logger";
 
 const router = Router();
 
+// =======================================================================
+// NOVA FUNÇÃO AUXILIAR PARA ANONIMIZAR DADOS
+// =======================================================================
+/**
+ * Recebe o usuário da requisição e um caso (ou uma lista de casos).
+ * Se o usuário for do perfil 'vigilancia', remove os campos sensíveis.
+ * @param user Objeto do usuário da requisição (contém o 'role')
+ * @param data Um único objeto de caso ou um array de objetos de caso
+ * @returns Os dados com os campos sensíveis removidos, se aplicável.
+ */
+function anonimizarDadosSeNecessario(user: { role: string }, data: any): any {
+  // Se o perfil NÃO for 'vigilancia', retorna os dados originais sem modificação.
+  if (user.role !== 'vigilancia') {
+    return data;
+  }
+
+  // Função interna para remover os campos de um único objeto
+  const removerCamposSensiveis = (caso: any) => {
+    // Cria uma cópia do objeto para não modificar o original (boa prática)
+    const casoAnonimizado = { ...caso };
+    
+    // Deleta as propriedades sensíveis. Usamos o operador 'delete'.
+    delete casoAnonimizado.nome;
+    delete casoAnonimizado.cpf;
+    delete casoAnonimizado.nis;
+
+    // Se os dados estiverem dentro do JSON 'dados_completos', removemos de lá também.
+    if (casoAnonimizado.dados_completos) {
+      delete casoAnonimizado.dados_completos.nome;
+      delete casoAnonimizado.dados_completos.cpf;
+      delete casoAnonimizado.dados_completos.nis;
+    }
+
+    return casoAnonimizado;
+  };
+
+  // Verifica se 'data' é um array ou um único objeto e aplica a função
+  if (Array.isArray(data)) {
+    return data.map(removerCamposSensiveis);
+  } else {
+    return removerCamposSensiveis(data);
+  }
+}
+
 // ROTA PARA CRIAR UM NOVO CASO (ATENDIMENTO) - VERSÃO FINAL CORRIGIDA
 router.post("/", authMiddleware, async (req: Request, res: Response) => {
     const userId = req.user!.id;
@@ -93,11 +137,96 @@ router.put("/:id", authMiddleware, async (req: Request, res: Response) => {
     }
 });
 
-
-// ROTA PARA LISTAR CASOS - 100% PRESERVADA
+// =======================================================================
+// ROTA DE LISTAGEM DE CASOS (GET) - ATUALIZADA PARA FILTROS AVANÇADOS
+// =======================================================================
+/**
+ * @route   GET /api/casos
+ * @desc    Lista casos com base em múltiplos filtros para o drill-down.
+ * @access  Private
+ */
 router.get("/", authMiddleware, async (req: Request, res: Response) => {
-  const userRole = req.user!.role;
-  const userId = req.user!.id;
+  const user = req.user!;
+  const { tecRef, filtro, valor } = req.query; // Novos parâmetros: filtro e valor
+
+  try {
+    let query = 'SELECT id, "dataCad", "tecRef", nome, dados_completos->>\'bairro\' as bairro FROM casos';
+    const params: (string | number)[] = [];
+    const whereClauses: string[] = [];
+
+    // Filtro 1: Restrição por perfil 'tecnico' (já existente)
+    if (user.role === 'tecnico') {
+      params.push(user.id);
+      whereClauses.push(`"userId" = $${params.length}`);
+    }
+
+    // Filtro 2: Busca por nome do técnico de referência (já existente)
+    if (tecRef && typeof tecRef === 'string') {
+      params.push(`%${tecRef}%`);
+      whereClauses.push(`"tecRef" ILIKE $${params.length}`);
+    }
+    
+    // Filtro 3: Novos filtros dinâmicos para o "Drill-Down"
+    if (filtro && typeof filtro === 'string') {
+        switch (filtro) {
+            case 'novos_no_mes':
+                whereClauses.push(`"dataCad" >= date_trunc('month', current_date)`);
+                break;
+            case 'reincidentes':
+                whereClauses.push(`(dados_completos->>'reincidente')::boolean = true`);
+                break;
+            case 'inseridos_paefi':
+                whereClauses.push(`(dados_completos->>'inseridoPAEFI')::boolean = true`);
+                break;
+            case 'por_bairro':
+                if (valor && typeof valor === 'string') {
+                    params.push(valor);
+                    whereClauses.push(`dados_completos->>'bairro' = $${params.length}`);
+                }
+                break;
+            case 'por_violencia':
+                 if (valor && typeof valor === 'string') {
+                    params.push(valor);
+                    whereClauses.push(`"tipoViolencia" = $${params.length}`);
+                }
+                break;
+            case 'por_canal':
+                 if (valor && typeof valor === 'string') {
+                    params.push(valor);
+                    whereClauses.push(`dados_completos->>'canalDenuncia' = $${params.length}`);
+                }
+                break;
+            case 'por_sexo':
+                if (valor && typeof valor === 'string') {
+                    params.push(valor);
+                    whereClauses.push(`dados_completos->>'sexo' = $${params.length}`);
+                }
+                break;
+        }
+    }
+    
+    // Constrói a query final
+    if (whereClauses.length > 0) {
+      query += ` WHERE ${whereClauses.join(' AND ')}`;
+    }
+    query += ' ORDER BY "dataCad" DESC';
+
+    const result = await pool.query(query, params);
+
+    // Aplica a anonimização ANTES de enviar a resposta
+    const dadosProcessados = anonimizarDadosSeNecessario(user, result.rows);
+    
+    res.json(dadosProcessados);
+
+  } catch (err: any) {
+    console.error("Erro ao listar casos:", err.message);
+    res.status(500).json({ message: "Erro ao buscar casos." });
+  }
+});
+
+// ROTA PARA LISTAR CASOS - ATUALIZADA COM A LÓGICA DE ANONIMIZAÇÃO
+router.get("/", authMiddleware, async (req: Request, res: Response) => {
+  const user = req.user!;
   const { tecRef } = req.query;
 
   try {
@@ -105,8 +234,8 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
     const params: (string | number)[] = [];
     const whereClauses: string[] = [];
 
-    if (userRole === 'tecnico') {
-      params.push(userId);
+    if (user.role === 'tecnico') {
+      params.push(user.id);
       whereClauses.push(`"userId" = $${params.length}`);
     }
 
@@ -121,12 +250,51 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
     query += ' ORDER BY "dataCad" DESC';
 
     const result = await pool.query(query, params);
-    res.json(result.rows);
+
+    // ANTES DE ENVIAR A RESPOSTA, APLICAMOS A ANONIMIZAÇÃO
+    const dadosProcessados = anonimizarDadosSeNecessario(user, result.rows);
+    
+    res.json(dadosProcessados);
 
   } catch (err: any) {
     console.error("Erro ao listar casos:", err.message);
     res.status(500).json({ message: "Erro ao buscar casos." });
   }
+});
+
+// ROTA PARA BUSCAR UM ÚNICO CASO POR ID - ATUALIZADA COM A LÓGICA DE ANONIMIZAÇÃO
+router.get("/:id", authMiddleware, async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const user = req.user!;
+
+    try {
+        let query = 'SELECT * FROM casos WHERE id = $1';
+        const params: (string | number)[] = [id];
+        if (user.role === 'tecnico') {
+            query += ' AND "userId" = $2';
+            params.push(user.id);
+        }
+        const result = await pool.query(query, params);
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: "Caso não encontrado ou você não tem permissão para vê-lo." });
+        }
+        const casoBase = result.rows[0];
+        const casoCompleto = {
+            ...casoBase.dados_completos,
+            id: casoBase.id,
+            dataCad: casoBase.dataCad,
+            tecRef: casoBase.tecRef,
+            nome: casoBase.nome,
+            userId: casoBase.userId
+        };
+
+        // ANTES DE ENVIAR A RESPOSTA, APLICAMOS A ANONIMIZAÇÃO
+        const dadosProcessados = anonimizarDadosSeNecessario(user, casoCompleto);
+
+        res.json(dadosProcessados);
+    } catch (err: any) {
+        res.status(500).json({ message: "Erro ao buscar detalhes do caso." });
+    }
 });
 
 
@@ -160,31 +328,6 @@ router.get("/:id", authMiddleware, async (req: Request, res: Response) => {
         res.json(casoCompleto);
     } catch (err: any) {
         res.status(500).json({ message: "Erro ao buscar detalhes do caso." });
-    }
-});
-
-
-// ROTA PARA EXCLUIR UM CASO - 100% PRESERVADA
-router.delete("/:id", authMiddleware, checkRole(['coordenador']), async (req: Request, res: Response) => {
-    const { id } = req.params;
-    const { id: userId, username } = req.user!;
-
-    try {
-        const result = await pool.query('DELETE FROM casos WHERE id = $1 RETURNING nome', [id]);
-        if (result.rowCount === 0) {
-            return res.status(404).json({ message: 'Caso não encontrado.' });
-        }
-        const nomeVitima = result.rows[0].nome;
-        await logAction({
-            userId,
-            username,
-            action: 'DELETE_CASE',
-            details: { casoId: id, nomeVitima }
-        });
-        res.status(200).json({ message: 'Caso excluído com sucesso.' });
-    } catch (err: any) {
-        console.error("Erro ao excluir caso:", err.message);
-        res.status(500).json({ message: "Erro ao excluir caso." });
     }
 });
 

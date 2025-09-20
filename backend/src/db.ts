@@ -7,11 +7,11 @@ const pool = new Pool({
   user: 'postgres',
   host: 'localhost',
   database: 'postgres',
-  password: 'suasdb123',
+  password: 'senha123', // Lembre-se que esta é a senha que deve estar correta
   port: 5433,
 });
 
-// Sua lógica de inicialização, 100% preservada
+// Sua lógica de inicialização
 let isDbInitialized = false;
 
 export async function initDb() {
@@ -23,7 +23,7 @@ export async function initDb() {
   console.log("🐘 Conectado ao PostgreSQL com sucesso!");
 
   try {
-    // Sua tabela 'users', 100% preservada
+    // Tabela 'users', 100% preservada
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -34,30 +34,20 @@ export async function initDb() {
     `);
     console.log("Tabela 'users' verificada/criada.");
     
-    // Tabela 'casos' com a correção aplicada
+    // Tabela 'casos', 100% preservada
     await client.query(`
       CREATE TABLE IF NOT EXISTS casos (
         id SERIAL PRIMARY KEY,
         "dataCad" DATE NOT NULL,
         "tecRef" TEXT NOT NULL,
-        
-        -- CORREÇÃO APLICADA AQUI: O campo 'nome' agora é opcional.
         nome TEXT, 
-        
         dados_completos JSONB,
         "userId" INTEGER NOT NULL REFERENCES users(id)
       );
     `);
     console.log("Tabela 'casos' verificada/criada.");
 
-    /*
-      NOTA IMPORTANTE: Se a tabela 'casos' já existe no seu banco de dados,
-      o comando acima pode não alterar a estrutura. Se o problema persistir,
-      você pode precisar executar o seguinte comando SQL manualmente uma vez:
-      ALTER TABLE casos ALTER COLUMN nome DROP NOT NULL;
-    */
-
-    // Sua tabela 'logs', 100% preservada
+    // Tabela 'logs', 100% preservada
     await client.query(`
       CREATE TABLE IF NOT EXISTS logs (
         id SERIAL PRIMARY KEY,
@@ -70,7 +60,7 @@ export async function initDb() {
     `);
     console.log("Tabela 'logs' verificada/criada.");
     
-    // Sua tabela 'acompanhamentos', 100% preservada
+    // Tabela 'acompanhamentos', 100% preservada
     await client.query(`
       CREATE TABLE IF NOT EXISTS acompanhamentos (
         id SERIAL PRIMARY KEY,
@@ -81,12 +71,52 @@ export async function initDb() {
       );
     `);
     console.log("Tabela 'acompanhamentos' verificada/criada.");
+
+    // ========================================================
+    // 📌 ADIÇÃO DAS NOVAS TABELAS
+    // ========================================================
     
-    // Seu seed de usuários, 100% preservado
+    // Tabela 'encaminhamentos'
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS encaminhamentos (
+          id SERIAL PRIMARY KEY,
+          "casoId" INTEGER NOT NULL REFERENCES casos(id) ON DELETE CASCADE,
+          "userId" INTEGER NOT NULL REFERENCES users(id),
+          "servicoDestino" VARCHAR(255) NOT NULL,
+          "dataEncaminhamento" DATE NOT NULL,
+          status VARCHAR(50) NOT NULL DEFAULT 'Pendente',
+          "dataRetorno" DATE,
+          observacoes TEXT,
+          "createdAt" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log("Tabela 'encaminhamentos' verificada/criada.");
+
+    // Tabela 'anexos'
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS anexos (
+          id SERIAL PRIMARY KEY,
+          "casoId" INTEGER NOT NULL REFERENCES casos(id) ON DELETE CASCADE,
+          "userId" INTEGER NOT NULL REFERENCES users(id),
+          "nomeOriginal" VARCHAR(255) NOT NULL,
+          "nomeArmazenado" VARCHAR(255) NOT NULL UNIQUE,
+          "caminhoArquivo" VARCHAR(255) NOT NULL,
+          "tipoArquivo" VARCHAR(100) NOT NULL,
+          "tamanhoArquivo" INTEGER NOT NULL,
+          descricao TEXT,
+          "dataUpload" TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log("Tabela 'anexos' verificada/criada.");
+    
+    // ========================================================
+    // 📌 ATUALIZAÇÃO DO SEED DE USUÁRIOS
+    // ========================================================
     const seeds = [
       { username: "coordenador", password: "senha123", role: "coordenador" },
       { username: "gestor", password: "senha123", role: "gestor" },
-      { username: "tecnico", password: "senha123", role: "tecnico" }
+      { username: "tecnico", password: "senha123", role: "tecnico" },
+      { username: "vigilancia", password: "senha123", role: "vigilancia" } // <-- Usuário adicionado
     ];
 
     for (const s of seeds) {

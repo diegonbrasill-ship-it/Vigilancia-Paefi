@@ -164,6 +164,84 @@ export async function updateEncaminhamento(id: number, data: { status: string; d
     return res.json();
 }
 
+export async function getAnexos(casoId: string): Promise<any[]> {
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('Usuário não autenticado.');
+    const res = await fetch(`${API_BASE_URL}/api/anexos/casos/${casoId}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || 'Erro ao buscar anexos');
+    }
+    return res.json();
+}
+
+export async function uploadAnexo(casoId: string, formData: FormData): Promise<any> {
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('Usuário não autenticado.');
+    const res = await fetch(`${API_BASE_URL}/api/anexos/upload/${casoId}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` },
+        body: formData,
+    });
+    if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || 'Erro ao enviar anexo');
+    }
+    return res.json();
+}
+
+export async function downloadAnexo(anexoId: number): Promise<{ blob: Blob, filename: string }> {
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('Usuário não autenticado.');
+    const res = await fetch(`${API_BASE_URL}/api/anexos/download/${anexoId}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || 'Erro ao baixar anexo');
+    }
+    const disposition = res.headers.get('content-disposition');
+    let filename = 'arquivo_anexo';
+    if (disposition && disposition.indexOf('attachment') !== -1) {
+        const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+        const matches = filenameRegex.exec(disposition);
+        if (matches != null && matches[1]) {
+            filename = matches[1].replace(/['"]/g, '');
+        }
+    }
+    const blob = await res.blob();
+    return { blob, filename };
+}
+
+export async function getUsers(): Promise<any[]> {
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('Usuário não autenticado.');
+    const res = await fetch(`${API_BASE_URL}/api/users`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+    if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || 'Erro ao buscar usuários');
+    }
+    return res.json();
+}
+
+export async function createUser(data: { username: string; password: string; role: string }): Promise<any> {
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('Usuário não autenticado.');
+    const res = await fetch(`${API_BASE_URL}/api/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || 'Erro ao criar usuário');
+    }
+    return res.json();
+}
 
 // --- FUNÇÕES DO DASHBOARD ---
 const buildUrlWithFilters = (baseUrl: string, filters?: { mes?: string }) => {
@@ -173,7 +251,6 @@ const buildUrlWithFilters = (baseUrl: string, filters?: { mes?: string }) => {
     }
     return url.toString();
 };
-
 const fetchDashboardData = async (endpoint: string, filters?: { mes?: string }) => {
     const token = localStorage.getItem('token');
     if (!token) throw new Error('Usuário não autenticado.');
@@ -185,7 +262,6 @@ const fetchDashboardData = async (endpoint: string, filters?: { mes?: string }) 
     }
     return res.json();
 };
-
 export const getDashboardFilterOptions = () => fetchDashboardData('/filter-options');
 export const getDashboardTotalCasos = (filters?: { mes?: string }) => fetchDashboardData('/total-casos', filters);
 export const getDashboardNovosNoMes = (filters?: { mes?: string }) => fetchDashboardData('/novos-no-mes', filters);
@@ -205,7 +281,6 @@ export const getDashboardCasosPorBairro = (filters?: { mes?: string }): Promise<
 export const getDashboardCasosPorSexo = (filters?: { mes?: string }): Promise<ChartData[]> => fetchDashboardData('/casos-por-sexo', filters);
 export const getDashboardEncaminhamentosTop5 = (filters?: { mes?: string }): Promise<ChartData[]> => fetchDashboardData('/encaminhamentos-top5', filters);
 export const getDashboardCanalDenuncia = (filters?: { mes?: string }): Promise<ChartData[]> => fetchDashboardData('/canal-denuncia', filters);
-
 
 // --- FUNÇÕES DO PAINEL DE VIGILÂNCIA ---
 export async function getVigilanciaFluxoDemanda(): Promise<{ casosNovosUltimos30Dias: number }> {
@@ -248,77 +323,33 @@ export async function getVigilanciaTaxaReincidencia(): Promise<{ taxaReincidenci
     return res.json();
 }
 
-
 // =======================================================================
-// NOVAS FUNÇÕES ADICIONADAS PARA GESTÃO DE ANEXOS
+// ADIÇÃO DA NOVA FUNÇÃO PARA BUSCAR CASOS COM FILTROS AVANÇADOS
 // =======================================================================
+interface FiltrosCasos {
+    filtro?: string;
+    valor?: string;
+    tecRef?: string;
+}
 
-/**
- * Busca todos os anexos de um caso específico
- */
-export async function getAnexos(casoId: string): Promise<any[]> {
+export async function getCasosFiltrados(filters?: FiltrosCasos): Promise<any[]> {
     const token = localStorage.getItem('token');
     if (!token) throw new Error('Usuário não autenticado.');
 
-    const res = await fetch(`${API_BASE_URL}/api/anexos/casos/${casoId}`, {
+    const params = new URLSearchParams();
+    if (filters) {
+        if (filters.filtro) params.append('filtro', filters.filtro);
+        if (filters.valor) params.append('valor', filters.valor);
+        if (filters.tecRef) params.append('tecRef', filters.tecRef);
+    }
+    const queryString = params.toString();
+
+    const res = await fetch(`${API_BASE_URL}/api/casos?${queryString}`, {
+        method: 'GET',
         headers: { 'Authorization': `Bearer ${token}` },
     });
 
-    if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || 'Erro ao buscar anexos');
-    }
-    return res.json();
-}
-
-/**
- * Faz o upload de um novo arquivo de anexo para um caso
- */
-export async function uploadAnexo(casoId: string, formData: FormData): Promise<any> {
-    const token = localStorage.getItem('token');
-    if (!token) throw new Error('Usuário não autenticado.');
-
-    const res = await fetch(`${API_BASE_URL}/api/anexos/upload/${casoId}`, {
-        method: 'POST',
-        headers: {
-            'Authorization': `Bearer ${token}`
-        },
-        body: formData,
-    });
-
-    if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || 'Erro ao enviar anexo');
-    }
-    return res.json();
-}
-
-/**
- * Faz o download de um anexo. Retorna um objeto com o blob e o nome do arquivo.
- */
-export async function downloadAnexo(anexoId: number): Promise<{ blob: Blob, filename: string }> {
-    const token = localStorage.getItem('token');
-    if (!token) throw new Error('Usuário não autenticado.');
-    
-    const res = await fetch(`${API_BASE_URL}/api/anexos/download/${anexoId}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-    });
-
-    if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.message || 'Erro ao baixar anexo');
-    }
-    
-    const disposition = res.headers.get('content-disposition');
-    let filename = 'arquivo_anexo';
-    if (disposition && disposition.indexOf('attachment') !== -1) {
-        const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
-        const matches = filenameRegex.exec(disposition);
-        if (matches != null && matches[1]) {
-            filename = matches[1].replace(/['"]/g, '');
-        }
-    }
-
-    const blob = await res.blob();
-    return { blob, filename };
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Erro ao buscar casos filtrados');
+    return data;
 }

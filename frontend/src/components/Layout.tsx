@@ -1,19 +1,29 @@
 // frontend/src/components/Layout.tsx
 
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
-import { LayoutDashboard, PlusCircle, Search, User, LogOut, BarChart3, Settings, FileText } from "lucide-react";
+import { LayoutDashboard, PlusCircle, Search, User, LogOut, BarChart3, Settings, FileText, Users } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 
-// Itens do menu com todas as páginas
-const navItems = [
-  { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+// Itens do menu agrupados por contexto
+const navItemsAtendimento = [
   { href: "/cadastro", icon: PlusCircle, label: "Coleta de Dados" },
   { href: "/consulta", icon: Search, label: "Consultar Caso" },
-  { href: "/painel-vigilancia", icon: BarChart3, label: "Painel de Vigilância" },
-  { href: "/relatorios", icon: FileText, label: "Relatórios" },
-  { href: "/integracoes", icon: Settings, label: "Integrações" },
 ];
+
+// CORREÇÃO APLICADA: "Integrações" foi movido para este grupo
+const navItemsAnalise = [
+    { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
+    { href: "/painel-vigilancia", icon: BarChart3, label: "Painel de Vigilância" },
+    { href: "/relatorios", icon: FileText, label: "Relatórios" },
+    { href: "/integracoes", icon: Settings, label: "Integrações" },
+];
+
+// Itens que só aparecerão para perfis de gestão
+const navItemsAdmin = [
+    { href: "/gerenciar-usuarios", icon: Users, label: "Gerenciar Usuários" },
+];
+
 
 export default function Layout() {
   const location = useLocation();
@@ -24,12 +34,14 @@ export default function Layout() {
     navigate('/login');
   };
   
-  // Extrai o nome do usuário do localStorage
+  // Lógica de permissão para extrair o perfil do usuário
   const userString = localStorage.getItem("user");
-  const username = userString ? JSON.parse(userString)?.username : "Usuário";
+  const user = userString ? JSON.parse(userString) : null;
+  const username = user?.username || "Usuário";
+  const userRole = user?.role || null;
 
   return (
-    <div className="min-h-screen w-full bg-slate-50 flex">
+    <div className="min-h-screen w-full bg-slate-100 flex">
       {/* SIDEBAR */}
       <aside className="w-64 bg-white border-r flex flex-col shadow-sm">
         <div className="p-4 border-b flex items-center gap-3">
@@ -39,29 +51,69 @@ export default function Layout() {
             <p className="text-xs text-slate-500">PAEFI - Patos/PB</p>
           </div>
         </div>
-        <nav className="flex-1 p-2 space-y-1">
-          {navItems.map((item) => {
-            const isActive = location.pathname === item.href;
-            return (
-              <Link
-                key={item.label}
-                to={item.href}
-                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                  isActive
-                    ? "bg-blue-100 text-blue-700"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                }`}
-              >
-                <item.icon className="h-5 w-5" />
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
+        
+        <nav className="flex-1 p-2 space-y-4">
+          {/* GRUPO DE ATENDIMENTO */}
+          <div>
+            <h2 className="px-3 mb-1 text-xs font-semibold text-slate-400 uppercase tracking-wider">Atendimento</h2>
+            {navItemsAtendimento.map((item) => {
+              const isActive = location.pathname === item.href;
+              return (
+                <Link key={item.label} to={item.href}
+                  className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive ? "bg-blue-100 text-blue-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  }`}
+                >
+                  <item.icon className="h-5 w-5" />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* GRUPO DE ANÁLISE E GESTÃO */}
+          <div>
+            <h2 className="px-3 mb-1 text-xs font-semibold text-slate-400 uppercase tracking-wider">Análise e Gestão</h2>
+            {navItemsAnalise.map((item) => {
+              const isActive = location.pathname === item.href;
+              return (
+                <Link key={item.label} to={item.href}
+                  className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                    isActive ? "bg-blue-100 text-blue-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  }`}
+                >
+                  <item.icon className="h-5 w-5" />
+                  <span>{item.label}</span>
+                </Link>
+              );
+            })}
+          </div>
+
+          {/* GRUPO DE ADMINISTRAÇÃO (SÓ APARECE PARA COORDENADOR/GESTOR) */}
+          {userRole && ['coordenador', 'gestor'].includes(userRole) && (
+            <div>
+              <h2 className="px-3 mb-1 text-xs font-semibold text-slate-400 uppercase tracking-wider">Administração</h2>
+              {navItemsAdmin.map((item) => {
+                const isActive = location.pathname === item.href;
+                return (
+                  <Link key={item.label} to={item.href}
+                    className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                      isActive ? "bg-blue-100 text-blue-700" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    }`}
+                  >
+                    <item.icon className="h-5 w-5" />
+                    <span>{item.label}</span>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </nav>
+
         <div className="p-2 border-t">
           <Button variant="ghost" className="w-full justify-start text-left" onClick={handleLogout}>
-              <LogOut className="mr-2 h-4 w-4" />
-              Sair
+            <LogOut className="mr-2 h-4 w-4" />
+            Sair
           </Button>
         </div>
       </aside>
@@ -72,8 +124,8 @@ export default function Layout() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-8 w-auto justify-start gap-2">
-                 <User className="h-5 w-5 text-slate-600" />
-                 <span className="font-medium text-slate-700">{username}</span>
+                <User className="h-5 w-5 text-slate-600" />
+                <span className="font-medium text-slate-700">{username}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent className="w-56" align="end" forceMount>
