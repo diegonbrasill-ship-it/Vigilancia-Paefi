@@ -1,9 +1,10 @@
 // frontend/src/pages/Cadastro.tsx
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useParams, useNavigate } from "react-router-dom";
 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,12 +22,8 @@ import { Button } from "@/components/ui/button";
 import { toast } from "react-toastify";
 import { Loader2, Eraser } from "lucide-react";
 
-// MODIFICAÇÃO: Importamos createCase e a nova função updateCase
-import { createCase, updateCase } from "../services/api";
+import { createCase, updateCase, getCasoById } from "../services/api";
 
-/* ==========================================================================
-   VALIDAÇÕES CUSTOMIZADAS (mantidas)
-   ========================================================================== */
 const validateCPF = (cpf: string | undefined): boolean => {
   if (!cpf || cpf.trim() === "") return true;
   const cpfClean = cpf.replace(/[^\d]/g, "");
@@ -39,9 +36,6 @@ const validateNIS = (nis: string | undefined): boolean => {
   return /^\d{11}$/.test(nis.replace(/[^\d]/g, ""));
 };
 
-/* ==========================================================================
-   ESQUEMA ZOD (inalterado)
-   ========================================================================== */
 const formSchema = z.object({
   dataCad: z.string().min(1, "A data do cadastro é obrigatória."),
   tecRef: z.string().min(3, "O nome do técnico é obrigatório."),
@@ -88,10 +82,11 @@ const formSchema = z.object({
 
 type CasoForm = z.infer<typeof formSchema>;
 
-/* ==========================================================================
-   COMPONENTE PRINCIPAL
-   ========================================================================== */
 export default function Cadastro() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const isEditMode = !!id;
+
   const {
     register,
     handleSubmit,
@@ -103,88 +98,76 @@ export default function Cadastro() {
   } = useForm<CasoForm>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      dataCad: "",
-      tecRef: "",
-      tipoViolencia: "",
-      localOcorrencia: "",
-      frequencia: "",
-      nome: "",
-      cpf: "",
-      nis: "",
-      idade: "",
-      sexo: "",
-      corEtnia: "",
-      bairro: "",
-      escolaridade: "",
-      rendaFamiliar: "",
-      recebePBF: "",
-      recebeBPC: "",
-      recebeBE: "",
-      membrosCadUnico: "",
-      membroPAI: "",
-      composicaoFamiliar: "",
-      tipoMoradia: "",
-      referenciaFamiliar: "",
-      vitimaPCD: "",
-      vitimaPCDDetalhe: "",
-      tratamentoSaude: "",
-      tratamentoSaudeDetalhe: "",
-      dependeFinanceiro: "",
-      encaminhamento: "",
-      encaminhamentoDetalhe: "",
-      qtdAtendimentos: "",
-      encaminhadaSCFV: "",
-      inseridoPAEFI: "",
-      confirmacaoViolencia: "",
-      canalDenuncia: "",
-      notificacaoSINAM: "",
-      membroCarcerario: "",
-      membroSocioeducacao: "",
-      reincidente: "",
+      dataCad: "", tecRef: "", tipoViolencia: "", localOcorrencia: "", frequencia: "",
+      nome: "", cpf: "", nis: "", idade: "", sexo: "", corEtnia: "", bairro: "",
+      escolaridade: "", rendaFamiliar: "", recebePBF: "", recebeBPC: "", recebeBE: "",
+      membrosCadUnico: "", membroPAI: "", composicaoFamiliar: "", tipoMoradia: "",
+      referenciaFamiliar: "", vitimaPCD: "", vitimaPCDDetalhe: "", tratamentoSaude: "",
+      tratamentoSaudeDetalhe: "", dependeFinanceiro: "", encaminhamento: "",
+      encaminhamentoDetalhe: "", qtdAtendimentos: "", encaminhadaSCFV: "", inseridoPAEFI: "",
+      confirmacaoViolencia: "", canalDenuncia: "", notificacaoSINAM: "", membroCarcerario: "",
+      membroSocioeducacao: "", reincidente: "",
     },
   });
 
-  // MODIFICAÇÃO: Novos estados para controlar o fluxo de "salvar e continuar"
   const [currentCaseId, setCurrentCaseId] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState("atendimento");
+
+  useEffect(() => {
+    if (isEditMode && id) {
+      const loadCasoData = async () => {
+        try {
+          toast.info(`Carregando dados do prontuário ID: ${id} para edição...`);
+          const casoData = await getCasoById(id);
+          reset(casoData);
+          setCurrentCaseId(parseInt(id, 10));
+        } catch (error) {
+          toast.error("Não foi possível carregar os dados do caso para edição.");
+          navigate("/consulta");
+        }
+      };
+      loadCasoData();
+    } else {
+        // Garante que o formulário esteja limpo ao navegar de um caso editado para um novo
+        handleFinalizeAndClear();
+    }
+  }, [id, isEditMode, reset, navigate]);
+
 
   const vitimaPCDValue = watch("vitimaPCD");
   const tratamentoSaudeValue = watch("tratamentoSaude");
   const encaminhamentoValue = watch("encaminhamento");
 
-  // MODIFICAÇÃO: Função onSubmit totalmente reconstruída para criar ou atualizar
   const onSubmit = async (data: CasoForm) => {
-    // Pega apenas os campos que foram realmente modificados pelo usuário
-    const dirtyData = Object.keys(dirtyFields).reduce((acc, key) => {
-      acc[key as keyof CasoForm] = getValues(key as keyof CasoForm);
-      return acc;
-    }, {} as Partial<CasoForm>);
-
-    // Se nenhum campo foi alterado e já estamos editando um caso, não faz nada
-    if (Object.keys(dirtyData).length === 0 && currentCaseId) {
-      toast.info("Nenhuma alteração para salvar.");
-      return;
-    }
-
     try {
-      if (currentCaseId === null) {
-        // --- MODO CRIAÇÃO ---
-        const response = await createCase(data);
-        if (response.casoId) {
-          setCurrentCaseId(response.casoId); // Guarda o ID do novo caso
-          toast.success("✅ Registro inicial criado! Continue preenchendo.");
-        }
+      if (isEditMode) {
+        await updateCase(id!, data);
+        toast.success("✅ Prontuário atualizado com sucesso!");
+        navigate(`/caso/${id}`);
       } else {
-        // --- MODO ATUALIZAÇÃO ---
-        await updateCase(currentCaseId, dirtyData);
+        const dirtyData = Object.keys(dirtyFields).reduce((acc, key) => {
+            acc[key as keyof CasoForm] = getValues(key as keyof CasoForm);
+            return acc;
+        }, {} as Partial<CasoForm>);
 
-        // Lógica do alerta final
-        if (activeTab === "encaminhamentos" && (!data.nome && !data.cpf && !data.nis)) {
-          toast.warn("✅ Progresso salvo! Atenção: o registro não possui Nome, CPF ou NIS.", {
-            theme: "colored",
-          });
+        if (Object.keys(dirtyData).length === 0 && currentCaseId) {
+            toast.info("Nenhuma alteração para salvar.");
+            return;
+        }
+
+        if (currentCaseId === null) {
+            const response = await createCase(data);
+            if (response.casoId) {
+                setCurrentCaseId(response.casoId);
+                toast.success("✅ Registro inicial criado! Continue preenchendo as abas.");
+            }
         } else {
-          toast.success("✅ Progresso salvo com sucesso!");
+            await updateCase(currentCaseId, dirtyData);
+            if (activeTab === "encaminhamentos" && (!data.nome && !data.cpf && !data.nis)) {
+                toast.warn("✅ Progresso salvo! Atenção: o registro não possui Nome, CPF ou NIS.", { theme: "colored" });
+            } else {
+                toast.success("✅ Progresso salvo com sucesso!");
+            }
         }
       }
     } catch (error: any) {
@@ -192,28 +175,39 @@ export default function Cadastro() {
     }
   };
 
-  // MODIFICAÇÃO: Nova função para finalizar e limpar o formulário para um novo registro
   const handleFinalizeAndClear = () => {
-    reset();
+    reset({
+        dataCad: "", tecRef: "", tipoViolencia: "", localOcorrencia: "", frequencia: "",
+        nome: "", cpf: "", nis: "", idade: "", sexo: "", corEtnia: "", bairro: "",
+        escolaridade: "", rendaFamiliar: "", recebePBF: "", recebeBPC: "", recebeBE: "",
+        membrosCadUnico: "", membroPAI: "", composicaoFamiliar: "", tipoMoradia: "",
+        referenciaFamiliar: "", vitimaPCD: "", vitimaPCDDetalhe: "", tratamentoSaude: "",
+        tratamentoSaudeDetalhe: "", dependeFinanceiro: "", encaminhamento: "",
+        encaminhamentoDetalhe: "", qtdAtendimentos: "", encaminhadaSCFV: "", inseridoPAEFI: "",
+        confirmacaoViolencia: "", canalDenuncia: "", notificacaoSINAM: "", membroCarcerario: "",
+        membroSocioeducacao: "", reincidente: "",
+    });
     setCurrentCaseId(null);
     setActiveTab("atendimento");
-    toast.info("Formulário limpo e pronto para um novo registro.");
+    if(!isEditMode) toast.info("Formulário limpo e pronto para um novo registro.");
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-800">Registros de Atendimento PAEFI</h1>
-        {/* MODIFICAÇÃO: Mensagem dinâmica */}
+        <h1 className="text-2xl font-bold text-slate-800">
+          {isEditMode ? `Editando Prontuário ID: ${id}` : "Registros de Atendimento PAEFI"}
+        </h1>
         <p className="text-slate-500">
-          {currentCaseId
-            ? `Editando o Prontuário ID: ${currentCaseId}. Salve o progresso em cada aba.`
+          {isEditMode
+            ? "Altere os dados necessários e clique em 'Salvar Alterações' no final."
+            : currentCaseId
+            ? `Continuando o Prontuário ID: ${currentCaseId}. Salve o progresso em cada aba.`
             : "Preencha as informações do caso navegando pelas abas."}
         </p>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)}>
-        {/* MODIFICAÇÃO: Controle da aba ativa */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="atendimento">1. Atendimento</TabsTrigger>
@@ -223,527 +217,183 @@ export default function Cadastro() {
             <TabsTrigger value="encaminhamentos">5. Encaminhamentos</TabsTrigger>
           </TabsList>
 
-          {/* O CONTEÚDO DAS ABAS ABAIXO ESTÁ 100% PRESERVADO E COMPLETO */}
           <Card className="mt-4">
             <CardContent className="pt-6">
               <TabsContent value="atendimento" className="space-y-6">
                 <CardHeader className="-m-6 mb-0">
                   <CardTitle>Dados do Atendimento e Violência</CardTitle>
                 </CardHeader>
-
                 <div className="grid md:grid-cols-2 gap-4 pt-4 border-t">
                   <div className="space-y-2">
                     <Label htmlFor="dataCad">Data do Cadastro</Label>
                     <Input id="dataCad" type="date" {...register("dataCad")} />
                     <p className="text-sm text-red-500 mt-1 h-4">{errors.dataCad?.message}</p>
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="tecRef">Técnico Responsável</Label>
                     <Input id="tecRef" placeholder="Nome do técnico" {...register("tecRef")} />
                     <p className="text-sm text-red-500 mt-1 h-4">{errors.tecRef?.message}</p>
                   </div>
                 </div>
-
                 <div className="grid md:grid-cols-3 gap-4">
                   <div className="space-y-2">
                     <Label>Tipo de Violência</Label>
-                    <Controller
-                      control={control}
-                      name="tipoViolencia"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Física">Física</SelectItem>
-                            <SelectItem value="Psicológica">Psicológica</SelectItem>
-                            <SelectItem value="Sexual">Sexual</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="tipoViolencia" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent><SelectItem value="Física">Física</SelectItem><SelectItem value="Psicológica">Psicológica</SelectItem><SelectItem value="Sexual">Sexual</SelectItem></SelectContent></Select> )} />
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="localOcorrencia">Local da Ocorrência</Label>
                     <Input id="localOcorrencia" {...register("localOcorrencia")} />
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="frequencia">Frequência</Label>
                     <Input id="frequencia" {...register("frequencia")} />
                   </div>
                 </div>
               </TabsContent>
-
               <TabsContent value="vitima" className="space-y-6">
                 <CardHeader className="-m-6 mb-0">
                   <CardTitle>Dados Pessoais da Vítima</CardTitle>
                 </CardHeader>
-
                 <div className="grid md:grid-cols-3 gap-4 pt-4 border-t">
                   <div className="space-y-2">
                     <Label htmlFor="nome">Nome Completo</Label>
                     <Input id="nome" {...register("nome")} />
                     <p className="text-sm text-red-500 mt-1 h-4">{errors.nome?.message}</p>
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="cpf">CPF</Label>
                     <Input id="cpf" {...register("cpf")} />
                     <p className="text-sm text-red-500 mt-1 h-4">{errors.cpf?.message}</p>
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="nis">NIS</Label>
                     <Input id="nis" {...register("nis")} />
                     <p className="text-sm text-red-500 mt-1 h-4">{errors.nis?.message}</p>
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="idade">Idade</Label>
                     <Input id="idade" type="number" {...register("idade")} />
                   </div>
-
                   <div className="space-y-2">
                     <Label>Sexo</Label>
-                    <Controller
-                      control={control}
-                      name="sexo"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Masculino">Masculino</SelectItem>
-                            <SelectItem value="Feminino">Feminino</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="sexo" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent><SelectItem value="Masculino">Masculino</SelectItem><SelectItem value="Feminino">Feminino</SelectItem></SelectContent></Select> )} />
                   </div>
-
                   <div className="space-y-2">
                     <Label>Cor/Etnia</Label>
-                    <Controller
-                      control={control}
-                      name="corEtnia"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Branca">Branca</SelectItem>
-                            <SelectItem value="Preta">Preta</SelectItem>
-                            <SelectItem value="Parda">Parda</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="corEtnia" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent><SelectItem value="Branca">Branca</SelectItem><SelectItem value="Preta">Preta</SelectItem><SelectItem value="Parda">Parda</SelectItem></SelectContent></Select> )} />
                   </div>
-
                   <div className="space-y-2">
                     <Label>Escolaridade</Label>
-                    <Controller
-                      control={control}
-                      name="escolaridade"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Selecione..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Fundamental Incompleto">Fundamental Incompleto</SelectItem>
-                            <SelectItem value="Fundamental Completo">Fundamental Completo</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="escolaridade" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent><SelectItem value="Fundamental Incompleto">Fundamental Incompleto</SelectItem><SelectItem value="Fundamental Completo">Fundamental Completo</SelectItem></SelectContent></Select> )} />
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="bairro">Bairro</Label>
                     <Input id="bairro" {...register("bairro")} />
                   </div>
                 </div>
               </TabsContent>
-
               <TabsContent value="familia" className="space-y-6">
                 <CardHeader className="-m-6 mb-0">
                   <CardTitle>Contexto Familiar e Social</CardTitle>
                 </CardHeader>
-
                 <div className="grid md:grid-cols-3 gap-4 pt-4 border-t">
                   <div className="space-y-2">
                     <Label htmlFor="rendaFamiliar">Renda Familiar (R$)</Label>
                     <Input id="rendaFamiliar" {...register("rendaFamiliar")} />
                   </div>
-
                   <div className="space-y-2">
                     <Label>Recebe Bolsa Família?</Label>
-                    <Controller
-                      control={control}
-                      name="recebePBF"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Sim">Sim</SelectItem>
-                            <SelectItem value="Não">Não</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="recebePBF" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger><SelectContent><SelectItem value="Sim">Sim</SelectItem><SelectItem value="Não">Não</SelectItem></SelectContent></Select> )} />
                   </div>
-
                   <div className="space-y-2">
                     <Label>Recebe BPC?</Label>
-                    <Controller
-                      control={control}
-                      name="recebeBPC"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Idoso">Idoso</SelectItem>
-                            <SelectItem value="PCD">PCD</SelectItem>
-                            <SelectItem value="NÃO">Não</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="recebeBPC" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger><SelectContent><SelectItem value="Idoso">Idoso</SelectItem><SelectItem value="PCD">PCD</SelectItem><SelectItem value="NÃO">Não</SelectItem></SelectContent></Select> )} />
                   </div>
-
                   <div className="space-y-2">
                     <Label>Recebe Benefício de Erradicação?</Label>
-                    <Controller
-                      control={control}
-                      name="recebeBE"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Sim">Sim</SelectItem>
-                            <SelectItem value="Não">Não</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="recebeBE" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger><SelectContent><SelectItem value="Sim">Sim</SelectItem><SelectItem value="Não">Não</SelectItem></SelectContent></Select> )} />
                   </div>
-
                   <div className="space-y-2">
                     <Label>Membros no CadÚnico?</Label>
-                    <Controller
-                      control={control}
-                      name="membrosCadUnico"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Sim">Sim</SelectItem>
-                            <SelectItem value="Não">Não</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="membrosCadUnico" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger><SelectContent><SelectItem value="Sim">Sim</SelectItem><SelectItem value="Não">Não</SelectItem></SelectContent></Select> )} />
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="composicaoFamiliar">Composição Familiar</Label>
                     <Input id="composicaoFamiliar" {...register("composicaoFamiliar")} />
                   </div>
-
                   <div className="space-y-2">
                     <Label>Tipo de Moradia</Label>
-                    <Controller
-                      control={control}
-                      name="tipoMoradia"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Própria">Própria</SelectItem>
-                            <SelectItem value="Alugada">Alugada</SelectItem>
-                            <SelectItem value="Cedida">Cedida</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="tipoMoradia" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger><SelectContent><SelectItem value="Própria">Própria</SelectItem><SelectItem value="Alugada">Alugada</SelectItem><SelectItem value="Cedida">Cedida</SelectItem></SelectContent></Select> )} />
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="referenciaFamiliar">Referência Familiar</Label>
                     <Input id="referenciaFamiliar" {...register("referenciaFamiliar")} />
                   </div>
-
                   <div className="space-y-2">
                     <Label>Membro em Sist. Carcerário?</Label>
-                    <Controller
-                      control={control}
-                      name="membroCarcerario"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Sim">Sim</SelectItem>
-                            <SelectItem value="Não">Não</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="membroCarcerario" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger><SelectContent><SelectItem value="Sim">Sim</SelectItem><SelectItem value="Não">Não</SelectItem></SelectContent></Select> )} />
                   </div>
-
                   <div className="space-y-2">
                     <Label>Membro em Socioeducação?</Label>
-                    <Controller
-                      control={control}
-                      name="membroSocioeducacao"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Sim">Sim</SelectItem>
-                            <SelectItem value="Não">Não</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="membroSocioeducacao" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger><SelectContent><SelectItem value="Sim">Sim</SelectItem><SelectItem value="Não">Não</SelectItem></SelectContent></Select> )} />
                   </div>
                 </div>
               </TabsContent>
-
               <TabsContent value="saude" className="space-y-6">
                 <CardHeader className="-m-6 mb-0">
                   <CardTitle>Saúde</CardTitle>
                 </CardHeader>
-
                 <div className="grid md:grid-cols-3 gap-4 pt-4 border-t">
                   <div className="space-y-2">
                     <Label>Vítima é Pessoa com Deficiência?</Label>
-                    <Controller
-                      control={control}
-                      name="vitimaPCD"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Sim">Sim</SelectItem>
-                            <SelectItem value="Não">Não</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="vitimaPCD" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger><SelectContent><SelectItem value="Sim">Sim</SelectItem><SelectItem value="Não">Não</SelectItem></SelectContent></Select> )} />
                   </div>
-
-                  {vitimaPCDValue === "Sim" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="vitimaPCDDetalhe">Qual?</Label>
-                      <Input id="vitimaPCDDetalhe" {...register("vitimaPCDDetalhe")} />
-                    </div>
-                  )}
-
+                  {vitimaPCDValue === "Sim" && ( <div className="space-y-2"><Label htmlFor="vitimaPCDDetalhe">Qual?</Label><Input id="vitimaPCDDetalhe" {...register("vitimaPCDDetalhe")} /></div> )}
                   <div className="space-y-2">
                     <Label>Faz tratamento de saúde?</Label>
-                    <Controller
-                      control={control}
-                      name="tratamentoSaude"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Sim">Sim</SelectItem>
-                            <SelectItem value="Não">Não</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="tratamentoSaude" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger><SelectContent><SelectItem value="Sim">Sim</SelectItem><SelectItem value="Não">Não</SelectItem></SelectContent></Select> )} />
                   </div>
-
-                  {tratamentoSaudeValue === "Sim" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="tratamentoSaudeDetalhe">Onde?</Label>
-                      <Input id="tratamentoSaudeDetalhe" {...register("tratamentoSaudeDetalhe")} />
-                    </div>
-                  )}
-
+                  {tratamentoSaudeValue === "Sim" && ( <div className="space-y-2"><Label htmlFor="tratamentoSaudeDetalhe">Onde?</Label><Input id="tratamentoSaudeDetalhe" {...register("tratamentoSaudeDetalhe")} /></div> )}
                   <div className="space-y-2">
                     <Label>Depende financeiramente do agressor?</Label>
-                    <Controller
-                      control={control}
-                      name="dependeFinanceiro"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Sim">Sim</SelectItem>
-                            <SelectItem value="Não">Não</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="dependeFinanceiro" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger><SelectContent><SelectItem value="Sim">Sim</SelectItem><SelectItem value="Não">Não</SelectItem></SelectContent></Select> )} />
                   </div>
                 </div>
               </TabsContent>
-
               <TabsContent value="encaminhamentos" className="space-y-6">
                 <CardHeader className="-m-6 mb-0">
                   <CardTitle>Fluxos e Encaminhamentos</CardTitle>
                 </CardHeader>
-
                 <div className="grid md:grid-cols-3 gap-4 pt-4 border-t">
                   <div className="space-y-2">
                     <Label>Encaminhamento realizado?</Label>
-                    <Controller
-                      control={control}
-                      name="encaminhamento"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Sim">Sim</SelectItem>
-                            <SelectItem value="Não">Não</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="encaminhamento" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger><SelectContent><SelectItem value="Sim">Sim</SelectItem><SelectItem value="Não">Não</SelectItem></SelectContent></Select> )} />
                   </div>
-
-                  {encaminhamentoValue === "Sim" && (
-                    <div className="space-y-2">
-                      <Label htmlFor="encaminhamentoDetalhe">Para onde?</Label>
-                      <Input id="encaminhamentoDetalhe" {...register("encaminhamentoDetalhe")} />
-                    </div>
-                  )}
-
+                  {encaminhamentoValue === "Sim" && ( <div className="space-y-2"><Label htmlFor="encaminhamentoDetalhe">Para onde?</Label><Input id="encaminhamentoDetalhe" {...register("encaminhamentoDetalhe")} /></div> )}
                   <div className="space-y-2">
                     <Label>Vítima encaminhada ao SCFV/CDI?</Label>
-                    <Controller
-                      control={control}
-                      name="encaminhadaSCFV"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="SCFV">SCFV</SelectItem>
-                            <SelectItem value="CDI">CDI</SelectItem>
-                            <SelectItem value="NÃO">NÃO</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="encaminhadaSCFV" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger><SelectContent><SelectItem value="SCFV">SCFV</SelectItem><SelectItem value="CDI">CDI</SelectItem><SelectItem value="NÃO">NÃO</SelectItem></SelectContent></Select> )} />
                   </div>
-
                   <div className="space-y-2">
                     <Label>Vítima Inserida no PAEFI?</Label>
-                    <Controller
-                      control={control}
-                      name="inseridoPAEFI"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Sim">Sim</SelectItem>
-                            <SelectItem value="Não">Não</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="inseridoPAEFI" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger><SelectContent><SelectItem value="Sim">Sim</SelectItem><SelectItem value="Não">Não</SelectItem></SelectContent></Select> )} />
                   </div>
-
                   <div className="space-y-2">
                     <Label>Confirmação da Violência</Label>
-                    <Controller
-                      control={control}
-                      name="confirmacaoViolencia"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Confirmada">Confirmada</SelectItem>
-                            <SelectItem value="Em análise">Em análise</SelectItem>
-                            <SelectItem value="Não confirmada">Não confirmada</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="confirmacaoViolencia" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger><SelectContent><SelectItem value="Confirmada">Confirmada</SelectItem><SelectItem value="Em análise">Em análise</SelectItem><SelectItem value="Não confirmada">Não confirmada</SelectItem></SelectContent></Select> )} />
                   </div>
-
-                  {/* NOVO CAMPO ADICIONADO AQUI */}
                   <div className="space-y-2">
                     <Label>É um caso de reincidência?</Label>
-                    <Controller
-                      control={control}
-                      name="reincidente"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Sim">Sim</SelectItem>
-                            <SelectItem value="Não">Não</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="reincidente" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger><SelectContent><SelectItem value="Sim">Sim</SelectItem><SelectItem value="Não">Não</SelectItem></SelectContent></Select> )} />
                   </div>
-
                   <div className="space-y-2">
                     <Label>Notificação no SINAN?</Label>
-                    <Controller
-                      control={control}
-                      name="notificacaoSINAM"
-                      render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Sim">Sim</SelectItem>
-                            <SelectItem value="Não">Não</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
+                    <Controller control={control} name="notificacaoSINAM" render={({ field }) => ( <Select onValueChange={field.onChange} value={field.value ?? ""}><SelectTrigger><SelectValue placeholder="..." /></SelectTrigger><SelectContent><SelectItem value="Sim">Sim</SelectItem><SelectItem value="Não">Não</SelectItem></SelectContent></Select> )} />
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="canalDenuncia">Canal de denúncia</Label>
                     <Input id="canalDenuncia" {...register("canalDenuncia")} />
                   </div>
-
                   <div className="space-y-2">
                     <Label htmlFor="qtdAtendimentos">Qtd. de Atendimentos</Label>
                     <Input id="qtdAtendimentos" type="number" {...register("qtdAtendimentos")} />
@@ -754,21 +404,19 @@ export default function Cadastro() {
           </Card>
         </Tabs>
 
-        {/* MODIFICAÇÃO: Botões dinâmicos de salvar e finalizar */}
         <div className="flex justify-between items-center mt-6">
           <div>
-            {currentCaseId && (
+            {currentCaseId && !isEditMode && (
               <Button type="button" variant="outline" size="lg" onClick={handleFinalizeAndClear}>
                 <Eraser className="mr-2 h-4 w-4" />
                 Novo Registro Limpo
               </Button>
             )}
           </div>
-
           <div className="flex justify-end">
             <Button type="submit" disabled={isSubmitting} size="lg">
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isSubmitting ? "Salvando..." : `💾 ${currentCaseId ? "Salvar Alterações" : "Salvar e Iniciar Prontuário"}`}
+              {isSubmitting ? "Salvando..." : `💾 ${isEditMode ? "Salvar Alterações" : (currentCaseId ? "Salvar Progresso da Aba" : "Salvar e Iniciar Prontuário")}`}
             </Button>
           </div>
         </div>

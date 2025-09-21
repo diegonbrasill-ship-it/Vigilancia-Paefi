@@ -7,13 +7,8 @@ import { logAction } from "../services/logger";
 
 const router = Router();
 
-// =======================================================================
-// FUNÇÃO AUXILIAR PARA ANONIMIZAR DADOS
-// =======================================================================
 function anonimizarDadosSeNecessario(user: { id: number; role: string }, data: any): any {
-  if (user.role !== 'vigilancia') {
-    return data;
-  }
+  if (user.role !== 'vigilancia') { return data; }
   const removerCamposSensiveis = (caso: any) => {
     const casoAnonimizado = { ...caso };
     delete casoAnonimizado.nome;
@@ -33,7 +28,6 @@ function anonimizarDadosSeNecessario(user: { id: number; role: string }, data: a
   }
 }
 
-// ROTA PARA CRIAR UM NOVO CASO (ATENDIMENTO)
 router.post("/", authMiddleware, async (req: Request, res: Response) => {
     const userId = req.user!.id;
     const casoData = req.body;
@@ -46,8 +40,8 @@ router.post("/", authMiddleware, async (req: Request, res: Response) => {
         }
         const dados_completos = casoData;
         const result = await pool.query(
-            `INSERT INTO casos ("dataCad", "tecRef", nome, dados_completos, "userId")
-             VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+            `INSERT INTO casos ("dataCad", "tecRef", nome, dados_completos, "userId", status)
+             VALUES ($1, $2, $3, $4, $5, 'Ativo') RETURNING id`,
             [ dataCad, tecRef, nome, JSON.stringify(dados_completos), userId ]
         );
         const novoCasoId = result.rows[0].id;
@@ -59,7 +53,6 @@ router.post("/", authMiddleware, async (req: Request, res: Response) => {
     }
 });
 
-// ROTA PARA ATUALIZAR UM CASO EXISTENTE (PUT)
 router.put("/:id", authMiddleware, async (req: Request, res: Response) => {
     const { id } = req.params;
     const novosDados = req.body;
@@ -87,35 +80,36 @@ router.put("/:id", authMiddleware, async (req: Request, res: Response) => {
     }
 });
 
-// ROTA DE LISTAGEM DE CASOS (GET) - COM FILTROS AVANÇADOS
 router.get("/", authMiddleware, async (req: Request, res: Response) => {
   const user = req.user!;
-  const { tecRef, filtro, valor } = req.query;
+  const { tecRef, filtro, valor, status = 'Ativo' } = req.query;
 
   try {
-    // A seleção de colunas agora é mais completa para a lista do modal
-    let query = 'SELECT id, "dataCad", "tecRef", nome, dados_completos->>\'bairro\' as bairro FROM casos';
+    let query = 'SELECT id, "dataCad", "tecRef", nome, status, dados_completos->>\'bairro\' as bairro FROM casos';
     const params: (string | number)[] = [];
     let whereClauses: string[] = [];
+    
+    if (status && typeof status === 'string' && status !== 'todos') {
+        params.push(status);
+        whereClauses.push(`status = $${params.length}`);
+    }
 
-    // Filtro 1: Restrição por perfil 'tecnico'
     if (user.role === 'tecnico') {
       params.push(user.id);
       whereClauses.push(`"userId" = $${params.length}`);
     }
 
-    // Filtro 2: Busca por nome do técnico de referência
     if (tecRef && typeof tecRef === 'string') {
       params.push(`%${tecRef}%`);
       whereClauses.push(`"tecRef" ILIKE $${params.length}`);
     }
     
-    // Filtro 3: Novos filtros dinâmicos para o "Drill-Down"
     if (filtro && typeof filtro === 'string') {
         switch (filtro) {
             case 'todos':
-                // Novo filtro para listar todos os casos (usado na Sobrecarga da Equipe)
-                break; // Nenhuma cláusula WHERE necessária
+                whereClauses = whereClauses.filter(c => !c.startsWith('status'));
+                if (params.includes('Ativo')) params.splice(params.indexOf('Ativo'), 1);
+                break;
             case 'novos_no_mes':
                 whereClauses.push(`"dataCad" >= date_trunc('month', current_date)`);
                 break;
@@ -149,6 +143,27 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
                     whereClauses.push(`dados_completos->>'sexo' = $${params.length}`);
                 }
                 break;
+            // =======================================================================
+            // ADIÇÃO DOS NOVOS FILTROS PARA OS NOVOS GRÁFICOS
+            // =======================================================================
+            case 'por_cor_etnia':
+                if (valor && typeof valor === 'string') {
+                    params.push(valor);
+                    whereClauses.push(`dados_completos->>'corEtnia' = $${params.length}`);
+                }
+                break;
+            case 'por_faixa_etaria':
+                if (valor && typeof valor === 'string') {
+                    let condition = '';
+                    if (valor.includes('0-11')) condition = `(dados_completos->>'idade')::integer BETWEEN 0 AND 11`;
+                    if (valor.includes('12-17')) condition = `(dados_completos->>'idade')::integer BETWEEN 12 AND 17`;
+                    if (valor.includes('18-29')) condition = `(dados_completos->>'idade')::integer BETWEEN 18 AND 29`;
+                    if (valor.includes('30-59')) condition = `(dados_completos->>'idade')::integer BETWEEN 30 AND 59`;
+                    if (valor.includes('60+')) condition = `(dados_completos->>'idade')::integer >= 60`;
+                    
+                    if(condition) whereClauses.push(condition);
+                }
+                break;
         }
     }
     
@@ -168,7 +183,6 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
   }
 });
 
-// ROTA PARA BUSCAR UM ÚNICO CASO POR ID
 router.get("/:id", authMiddleware, async (req: Request, res: Response) => {
     const { id } = req.params;
     const user = req.user!;
@@ -190,7 +204,8 @@ router.get("/:id", authMiddleware, async (req: Request, res: Response) => {
             dataCad: casoBase.dataCad,
             tecRef: casoBase.tecRef,
             nome: casoBase.nome,
-            userId: casoBase.userId
+            userId: casoBase.userId,
+            status: casoBase.status
         };
         const dadosProcessados = anonimizarDadosSeNecessario(user, casoCompleto);
         res.json(dadosProcessados);
@@ -200,8 +215,35 @@ router.get("/:id", authMiddleware, async (req: Request, res: Response) => {
     }
 });
 
-// ROTA PARA EXCLUIR UM CASO (DELETE)
-router.delete("/:id", authMiddleware, checkRole(['coordenador']), async (req: Request, res: Response) => {
+router.patch("/:id/status", authMiddleware, checkRole(['coordenador', 'gestor']), async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    const { id: userId, username } = req.user!;
+    if (!status || !['Ativo', 'Desligado', 'Arquivado'].includes(status)) {
+        return res.status(400).json({ message: "Status inválido. Valores permitidos: Ativo, Desligado, Arquivado." });
+    }
+    try {
+        const result = await pool.query(
+            'UPDATE casos SET status = $1 WHERE id = $2 RETURNING id, nome',
+            [status, id]
+        );
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'Caso não encontrado.' });
+        }
+        await logAction({
+            userId,
+            username,
+            action: 'UPDATE_CASE_STATUS',
+            details: { casoId: id, nomeVitima: result.rows[0].nome, novoStatus: status }
+        });
+        res.status(200).json({ message: `Caso ${id} foi atualizado para '${status}' com sucesso.` });
+    } catch (err: any) {
+        console.error(`Erro ao atualizar status do caso ${id}:`, err.message);
+        res.status(500).json({ message: "Erro interno ao atualizar o status do caso." });
+    }
+});
+
+router.delete("/:id", authMiddleware, checkRole(['coordenador', 'gestor']), async (req: Request, res: Response) => {
     const { id } = req.params;
     const { id: userId, username } = req.user!;
     try {
@@ -218,7 +260,6 @@ router.delete("/:id", authMiddleware, checkRole(['coordenador']), async (req: Re
     }
 });
 
-// ROTA PARA LISTAR ENCAMINHAMENTOS DE UM CASO
 router.get("/:casoId/encaminhamentos", authMiddleware, async (req: Request, res: Response) => {
     const { casoId } = req.params;
     try {

@@ -45,6 +45,42 @@ export async function updateCase(id: number | string, casoData: any): Promise<an
     return data;
 }
 
+export async function updateCasoStatus(casoId: string | number, status: string): Promise<any> {
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('Usuário não autenticado.');
+    
+    const res = await fetch(`${API_BASE_URL}/api/casos/${casoId}/status`, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status }),
+    });
+
+    if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || 'Erro ao atualizar o status do caso');
+    }
+    return res.json();
+}
+
+export async function deleteCaso(casoId: string | number): Promise<any> {
+    const token = localStorage.getItem('token');
+    if (!token) throw new Error('Usuário não autenticado.');
+    
+    const res = await fetch(`${API_BASE_URL}/api/casos/${casoId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+    });
+
+    if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || 'Erro ao excluir o caso');
+    }
+    return res.json();
+}
+
 export async function getCasos(filters?: { tecRef?: string }): Promise<any[]> {
     const token = localStorage.getItem('token');
     if (!token) throw new Error('Usuário não autenticado.');
@@ -243,9 +279,6 @@ export async function createUser(data: { username: string; password: string; rol
     return res.json();
 }
 
-// =======================================================================
-// NOVA FUNÇÃO ADICIONADA PARA O DRILL-DOWN
-// =======================================================================
 interface FiltrosCasos {
     filtro?: string;
     valor?: string;
@@ -255,7 +288,6 @@ interface FiltrosCasos {
 export async function getCasosFiltrados(filters?: FiltrosCasos): Promise<any[]> {
     const token = localStorage.getItem('token');
     if (!token) throw new Error('Usuário não autenticado.');
-
     const params = new URLSearchParams();
     if (filters) {
         if (filters.filtro) params.append('filtro', filters.filtro);
@@ -263,12 +295,10 @@ export async function getCasosFiltrados(filters?: FiltrosCasos): Promise<any[]> 
         if (filters.tecRef) params.append('tecRef', filters.tecRef);
     }
     const queryString = params.toString();
-
     const res = await fetch(`${API_BASE_URL}/api/casos?${queryString}`, {
         method: 'GET',
         headers: { 'Authorization': `Bearer ${token}` },
     });
-
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || 'Erro ao buscar casos filtrados');
     return data;
@@ -313,6 +343,9 @@ export const getDashboardCasosPorBairro = (filters?: { mes?: string }): Promise<
 export const getDashboardCasosPorSexo = (filters?: { mes?: string }): Promise<ChartData[]> => fetchDashboardData('/casos-por-sexo', filters);
 export const getDashboardEncaminhamentosTop5 = (filters?: { mes?: string }): Promise<ChartData[]> => fetchDashboardData('/encaminhamentos-top5', filters);
 export const getDashboardCanalDenuncia = (filters?: { mes?: string }): Promise<ChartData[]> => fetchDashboardData('/canal-denuncia', filters);
+export const getDashboardCasosPorCor = (filters?: { mes?: string }): Promise<ChartData[]> => fetchDashboardData('/casos-por-cor', filters);
+export const getDashboardCasosPorFaixaEtaria = (filters?: { mes?: string }): Promise<ChartData[]> => fetchDashboardData('/casos-por-faixa-etaria', filters);
+
 
 // --- FUNÇÕES DO PAINEL DE VIGILÂNCIA ---
 export async function getVigilanciaFluxoDemanda(): Promise<{ casosNovosUltimos30Dias: number }> {
@@ -355,7 +388,6 @@ export async function getVigilanciaTaxaReincidencia(): Promise<{ taxaReincidenci
     return res.json();
 }
 
-// ADIÇÃO DA ÚLTIMA FUNÇÃO QUE FALTAVA PARA O PAINEL DE VIGILÂNCIA
 export async function getVigilanciaPerfilViolacoes(): Promise<{ tipo: string; quantidade: number }[]> {
     const token = localStorage.getItem('token');
     if (!token) throw new Error('Usuário não autenticado.');

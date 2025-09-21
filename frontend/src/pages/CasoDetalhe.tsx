@@ -1,10 +1,11 @@
 // frontend/src/pages/CasoDetalhe.tsx
 
 import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
+import { useAuth } from "@/contexts/AuthContext";
 
-// 🔹 Serviços (Atualizado com funções de Anexos)
+// 🔹 Serviços de API
 import {
   getCasoById,
   getAcompanhamentos,
@@ -15,6 +16,8 @@ import {
   getAnexos,
   uploadAnexo,
   downloadAnexo,
+  updateCasoStatus,
+  deleteCaso,
 } from "../services/api";
 
 // 🔹 Componentes UI
@@ -24,12 +27,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 
-// 🔹 Ícones (Atualizado com ícones de Anexos)
-import { ArrowLeft, Loader2, CheckCircle, Upload, Download, FileText } from "lucide-react";
+// 🔹 Ícones
+import { ArrowLeft, Loader2, CheckCircle, Upload, Download, FileText, Power, PowerOff, Trash2, Pencil } from "lucide-react";
 
 // ========================================================
-// 📌 Tipagens (Atualizado com a interface Anexo)
+// 📌 Tipagens
 // ========================================================
 interface Encaminhamento {
   id: number;
@@ -53,7 +57,7 @@ interface Anexo {
 // 📌 Componente auxiliar: DataItem
 // ========================================================
 function DataItem({ label, value }: { label: string; value: any }) {
-  if (value === null || value === undefined || value === "") return null;
+  if (value === null || value === undefined || value === "" || label === 'status') return null;
   return (
     <div className="py-2">
       <p className="text-sm font-medium text-slate-500 capitalize">
@@ -74,9 +78,15 @@ const listaDeServicos = [ "CRAS", "CREAS", "Conselho Tutelar", "Ministério Púb
 // ========================================================
 export default function CasoDetalhe() {
   // -------------------------
-  // Estados
+  // Hooks
   // -------------------------
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  // -------------------------
+  // Estados
+  // -------------------------
   const [caso, setCaso] = useState<any>(null);
   const [acompanhamentos, setAcompanhamentos] = useState<any[]>([]);
   const [novoAcompanhamento, setNovoAcompanhamento] = useState("");
@@ -88,13 +98,12 @@ export default function CasoDetalhe() {
   const [novoEncaminhamentoData, setNovoEncaminhamentoData] = useState("");
   const [novoEncaminhamentoObs, setNovoEncaminhamentoObs] = useState("");
   const [updatingEncId, setUpdatingEncId] = useState<number | null>(null);
-
-  // Estados para Gestão de Documentos
   const [anexos, setAnexos] = useState<Anexo[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [downloadingAnexoId, setDownloadingAnexoId] = useState<number | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [anexoDescricao, setAnexoDescricao] = useState("");
+  const [isActionLoading, setIsActionLoading] = useState(false);
 
   // -------------------------
   // Buscar dados do caso
@@ -115,18 +124,21 @@ export default function CasoDetalhe() {
       setAnexos(anexosData);
     } catch (error: any) {
       toast.error(`Erro ao carregar dados: ${error.message}`);
+      setCaso(null);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    setIsLoading(true);
-    fetchData();
+    if (id) {
+      setIsLoading(true);
+      fetchData();
+    }
   }, [id]);
 
   // -------------------------
-  // Acompanhamento
+  // Handlers de Ações
   // -------------------------
   const handleSalvarAcompanhamento = async () => {
     if (!id || !novoAcompanhamento.trim()) {
@@ -146,9 +158,6 @@ export default function CasoDetalhe() {
     }
   };
 
-  // -------------------------
-  // Encaminhamentos
-  // -------------------------
   const handleSalvarEncaminhamento = async () => {
     if (!id || !novoEncaminhamentoServico || !novoEncaminhamentoData) {
       toast.warn("Serviço de Destino e Data são obrigatórios.");
@@ -187,9 +196,6 @@ export default function CasoDetalhe() {
     }
   };
 
-  // -------------------------
-  // Anexos (Documentos)
-  // -------------------------
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       setSelectedFile(event.target.files[0]);
@@ -239,33 +245,103 @@ export default function CasoDetalhe() {
     }
   };
 
+  const handleDesligarCaso = async () => {
+    if (!id || !window.confirm("Você tem certeza que deseja DESLIGAR este caso? Ele ficará inativo no sistema, mas poderá ser reativado.")) return;
+    setIsActionLoading(true);
+    try {
+      await updateCasoStatus(id, "Desligado");
+      toast.success("Caso desligado com sucesso.");
+      await fetchData();
+    } catch (error: any) {
+      // Se o backend negar a ação por falta de permissão, o erro será exibido aqui.
+      toast.error(`Erro ao desligar o caso: ${error.message}`);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleReativarCaso = async () => {
+    if (!id || !window.confirm("Você tem certeza que deseja REATIVAR este caso?")) return;
+    setIsActionLoading(true);
+    try {
+      await updateCasoStatus(id, "Ativo");
+      toast.success("Caso reativado com sucesso.");
+      await fetchData();
+    } catch (error: any) {
+      toast.error(`Erro ao reativar o caso: ${error.message}`);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
+  const handleExcluirCaso = async () => {
+    if (!id || !window.confirm("!!! ATENÇÃO !!!\nVocê tem certeza que deseja EXCLUIR PERMANENTEMENTE este caso?\n\nTODOS os dados, acompanhamentos, encaminhamentos e anexos serão apagados para sempre. Esta ação não pode ser desfeita.")) return;
+    setIsActionLoading(true);
+    try {
+      await deleteCaso(id);
+      toast.success("Caso excluído permanentemente.");
+      navigate("/consulta");
+    } catch (error: any) {
+      toast.error(`Erro ao excluir o caso: ${error.message}`);
+    } finally {
+      setIsActionLoading(false);
+    }
+  };
+
   // ========================================================
   // 📌 Renderização
   // ========================================================
   if (isLoading) {
     return <div className="text-center p-10">Carregando dados do prontuário...</div>;
   }
-
   if (!caso) {
-    return <div className="text-center p-10">Não foi possível carregar os dados do caso.</div>;
+    return <div className="text-center p-10">Não foi possível carregar os dados do caso. Tente novamente mais tarde.</div>;
   }
-
   const dataCadastroFormatada = new Date(caso.dataCad).toLocaleDateString( "pt-BR", { timeZone: "UTC" });
 
   return (
     <div className="space-y-6">
-      {/* Botão voltar */}
-      <Button asChild variant="outline">
-        <Link to="/consulta">
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar para a Lista de Casos
-        </Link>
-      </Button>
+      <div className="flex justify-between items-start flex-wrap gap-4">
+        <Button asChild variant="outline">
+          <Link to="/consulta">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Voltar para a Lista de Casos
+          </Link>
+        </Button>
 
-      {/* 📋 Dados principais */}
+        {/* CORREÇÃO: Botões de Ação agora são visíveis para todos, 
+            mas a API garantirá a segurança de quem pode executar a ação. */}
+        <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => navigate(`/cadastro/${id}`)}>
+                <Pencil className="mr-2 h-4 w-4"/>
+                Editar Dados
+            </Button>
+            {caso.status === 'Ativo' ? (
+              <Button variant="outline" size="sm" onClick={handleDesligarCaso} disabled={isActionLoading}>
+                {isActionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <PowerOff className="mr-2 h-4 w-4"/>}
+                Desligar Caso
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" onClick={handleReativarCaso} disabled={isActionLoading}>
+                {isActionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Power className="mr-2 h-4 w-4"/>}
+                Reativar Caso
+              </Button>
+            )}
+            <Button variant="destructive" size="sm" onClick={handleExcluirCaso} disabled={isActionLoading}>
+              {isActionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Trash2 className="mr-2 h-4 w-4"/>}
+              Excluir
+            </Button>
+        </div>
+      </div>
+
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl">{caso.nome}</CardTitle>
+          <div className="flex justify-between items-center">
+            <CardTitle className="text-2xl">{caso.nome || "[Caso sem nome]"}</CardTitle>
+            {caso.status !== 'Ativo' && (
+              <Badge variant="destructive" className="text-sm">{`Status: ${caso.status}`}</Badge>
+            )}
+          </div>
           <CardDescription>
             Prontuário de Atendimento PAEFI | Cadastrado em:{" "}
             {dataCadastroFormatada} por {caso.tecRef}
@@ -285,13 +361,11 @@ export default function CasoDetalhe() {
         </CardContent>
       </Card>
 
-      {/* 📌 Gestão de Encaminhamentos */}
       <Card>
         <CardHeader>
           <CardTitle>Gestão de Encaminhamentos</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Novo encaminhamento */}
           <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
             <h3 className="font-semibold text-md">Registrar Novo Encaminhamento</h3>
             <div className="grid md:grid-cols-2 gap-4">
@@ -338,8 +412,6 @@ export default function CasoDetalhe() {
               Salvar Encaminhamento
             </Button>
           </div>
-
-          {/* Histórico de encaminhamentos */}
           <div className="space-y-4 border-t pt-4">
             <h3 className="font-semibold text-md mb-2">Histórico de Encaminhamentos</h3>
             {encaminhamentos.length > 0 ? (
@@ -385,14 +457,12 @@ export default function CasoDetalhe() {
           </div>
         </CardContent>
       </Card>
-
-      {/* 📁 Gestão de Documentos (Anexos) */}
+      
       <Card>
         <CardHeader>
           <CardTitle>Gestão de Documentos (Anexos)</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Formulário de Upload */}
           <div className="space-y-4 p-4 border rounded-lg bg-slate-50">
             <h3 className="font-semibold text-md">Adicionar Novo Documento</h3>
             <div className="space-y-2">
@@ -423,8 +493,6 @@ export default function CasoDetalhe() {
               Enviar Arquivo
             </Button>
           </div>
-
-          {/* Histórico de Anexos */}
           <div className="space-y-4 border-t pt-4">
             <h3 className="font-semibold text-md mb-2">Documentos Anexados</h3>
             {anexos.length > 0 ? (
@@ -471,14 +539,12 @@ export default function CasoDetalhe() {
           </div>
         </CardContent>
       </Card>
-
-      {/* 📌 Histórico de Acompanhamentos */}
+      
       <Card>
         <CardHeader>
           <CardTitle>Histórico de Acompanhamentos</CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Novo acompanhamento */}
           <div className="space-y-2">
             <Label htmlFor="novo-acompanhamento" className="text-base">
               Registrar Nova Evolução / Atendimento
@@ -495,8 +561,6 @@ export default function CasoDetalhe() {
               Salvar Acompanhamento
             </Button>
           </div>
-
-          {/* Histórico de acompanhamentos */}
           <div className="space-y-4 border-t pt-4">
             {acompanhamentos.length > 0 ? (
               acompanhamentos.map((acomp) => (

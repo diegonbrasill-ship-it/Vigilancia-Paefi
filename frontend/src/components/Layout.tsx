@@ -1,25 +1,22 @@
 // frontend/src/components/Layout.tsx
 
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext"; // 1. IMPORTAMOS O NOSSO HOOK useAuth
 import { LayoutDashboard, PlusCircle, Search, User, LogOut, BarChart3, Settings, FileText, Users } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 
-// Itens do menu agrupados por contexto
+// Itens do menu agrupados por contexto (sem alterações)
 const navItemsAtendimento = [
   { href: "/cadastro", icon: PlusCircle, label: "Coleta de Dados" },
   { href: "/consulta", icon: Search, label: "Consultar Caso" },
 ];
-
-// CORREÇÃO APLICADA: "Integrações" foi movido para este grupo
 const navItemsAnalise = [
     { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
     { href: "/painel-vigilancia", icon: BarChart3, label: "Painel de Vigilância" },
     { href: "/relatorios", icon: FileText, label: "Relatórios" },
     { href: "/integracoes", icon: Settings, label: "Integrações" },
 ];
-
-// Itens que só aparecerão para perfis de gestão
 const navItemsAdmin = [
     { href: "/gerenciar-usuarios", icon: Users, label: "Gerenciar Usuários" },
 ];
@@ -29,14 +26,16 @@ export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  // 2. UTILIZAMOS O useAuth PARA PEGAR AS INFORMAÇÕES E FUNÇÕES
+  const { user, logout } = useAuth();
+
   const handleLogout = () => {
-    localStorage.clear();
+    logout(); // A função de logout agora vem do nosso contexto
     navigate('/login');
   };
   
-  // Lógica de permissão para extrair o perfil do usuário
-  const userString = localStorage.getItem("user");
-  const user = userString ? JSON.parse(userString) : null;
+  // 3. A LÓGICA DE LER O LOCALSTORAGE FOI REMOVIDA
+  // Agora pegamos as informações diretamente do 'user' fornecido pelo contexto.
   const username = user?.username || "Usuário";
   const userRole = user?.role || null;
 
@@ -89,7 +88,7 @@ export default function Layout() {
             })}
           </div>
 
-          {/* GRUPO DE ADMINISTRAÇÃO (SÓ APARECE PARA COORDENADOR/GESTOR) */}
+          {/* GRUPO DE ADMINISTRAÇÃO (A lógica de permissão agora usa userRole do contexto) */}
           {userRole && ['coordenador', 'gestor'].includes(userRole) && (
             <div>
               <h2 className="px-3 mb-1 text-xs font-semibold text-slate-400 uppercase tracking-wider">Administração</h2>

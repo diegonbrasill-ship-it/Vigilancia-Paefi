@@ -6,20 +6,22 @@ import { Loader2, User, Lock } from "lucide-react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-// Imports dos novos componentes que corrigem os erros de módulo
+// 1. IMPORTAMOS O NOSSO HOOK useAuth
+import { useAuth } from "@/contexts/AuthContext";
+
+// Imports dos componentes UI
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
-// Seus imports de logos e serviços de API
+// Imports de logos e serviços de API
 import prefeituraLogo from "../assets/logos/prefeitura.png";
 import secretariaLogo from "../assets/logos/secretaria.png";
 import creasLogo from "../assets/logos/creas.png";
 import paefiLogo from "../assets/logos/paefi.png";
 import { login as apiLogin } from "../services/api";
 
-// A prop onLogin é opcional, então não precisa se preocupar com ela
 type LoginProps = {
   onLogin?: () => void;
 };
@@ -30,18 +32,21 @@ export default function Login({ onLogin }: LoginProps) {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // CORREÇÃO 'any type' #1:
-  // Adicionamos o tipo 'React.FormEvent' ao parâmetro 'e'
-  // Isso informa ao TypeScript que 'e' é um evento de submissão de formulário.
+  // 2. PEGAMOS A FUNÇÃO DE LOGIN DO NOSSO CONTEXTO
+  const { login } = useAuth();
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
     try {
+      // A chamada para a API continua a mesma
       const res = await apiLogin(username.trim(), password);
-      if (res?.token) {
-        localStorage.setItem("token", res.token);
-        localStorage.setItem("user", JSON.stringify(res.user || { username }));
-      }
+      
+      // 3. A LÓGICA DE SALVAR NO LOCALSTORAGE FOI SUBSTITUÍDA
+      // Agora, apenas chamamos a função 'login' do contexto,
+      // que fará todo o trabalho pesado para nós.
+      login(res.token, res.user);
+
       toast.success("Login efetuado com sucesso");
       onLogin?.();
       navigate("/dashboard");
@@ -78,9 +83,6 @@ export default function Login({ onLogin }: LoginProps) {
                   id="username"
                   type="text"
                   value={username}
-                  // CORREÇÃO 'any type' #2:
-                  // Adicionamos o tipo 'React.ChangeEvent<HTMLInputElement>' ao 'e'
-                  // Isso informa que 'e' é um evento de mudança de um campo de input.
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)}
                   className="pl-9"
                   placeholder="Seu usuário"
@@ -96,8 +98,6 @@ export default function Login({ onLogin }: LoginProps) {
                   id="password"
                   type="password"
                   value={password}
-                  // CORREÇÃO 'any type' #3:
-                  // Mesmo tipo do input de usuário
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
                   className="pl-9"
                   placeholder="Sua senha"

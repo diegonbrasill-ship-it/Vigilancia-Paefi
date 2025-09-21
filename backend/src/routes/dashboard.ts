@@ -74,18 +74,13 @@ const executeChartQuery = async (req: Request, res: Response, field: string, lim
     }
 };
 
-// --- ROTAS DE INDICADORES (TODAS ATUALIZADAS PARA ACEITAR FILTROS) ---
+// --- ROTAS DE INDICADORES ---
 router.get("/total-casos", authMiddleware, (req, res) => executeCountQuery(req, res, "totalAtendimentos", 'SELECT COUNT(id) AS total FROM casos'));
 router.get("/novos-no-mes", authMiddleware, (req, res) => executeCountQuery(req, res, "novosNoMes", `SELECT COUNT(id) AS total FROM casos WHERE "dataCad" >= date_trunc('month', CURRENT_DATE)`));
 router.get("/inseridos-paefi", authMiddleware, (req, res) => executeCountQuery(req, res, "inseridosPAEFI", `SELECT COUNT(id) AS total FROM casos WHERE dados_completos->>'inseridoPAEFI' = 'Sim'`));
 router.get("/casos-reincidentes", authMiddleware, (req, res) => executeCountQuery(req, res, "reincidentes", `SELECT COUNT(id) AS total FROM casos WHERE dados_completos->>'reincidente' = 'Sim'`));
 router.get("/recebem-bolsa-familia", authMiddleware, (req, res) => executeCountQuery(req, res, "recebemBolsaFamilia", `SELECT COUNT(id) AS total FROM casos WHERE dados_completos->>'recebePBF' = 'Sim'`));
-
-// =======================================================================
-// CORREÇÃO APLICADA AQUI: A query agora busca apenas pelos valores explícitos 'Idoso' ou 'PCD'.
-// =======================================================================
 router.get("/recebem-bpc", authMiddleware, (req, res) => executeCountQuery(req, res, "recebemBPC", `SELECT COUNT(id) AS total FROM casos WHERE dados_completos->>'recebeBPC' IN ('Idoso', 'PCD')`));
-
 router.get("/violencia-confirmada", authMiddleware, (req, res) => executeCountQuery(req, res, "violenciaConfirmada", `SELECT COUNT(id) AS total FROM casos WHERE dados_completos->>'confirmacaoViolencia' = 'Confirmada'`));
 router.get("/notificados-sinan", authMiddleware, (req, res) => executeCountQuery(req, res, "notificadosSINAN", `SELECT COUNT(id) AS total FROM casos WHERE dados_completos->>'notificacaoSINAM' = 'Sim'`));
 router.get("/contexto-familiar", authMiddleware, async (req, res) => {
@@ -120,6 +115,55 @@ router.get("/casos-por-bairro", authMiddleware, (req, res) => executeChartQuery(
 router.get("/casos-por-sexo", authMiddleware, (req, res) => executeChartQuery(req, res, "sexo"));
 router.get("/encaminhamentos-top5", authMiddleware, (req, res) => executeChartQuery(req, res, "encaminhamentoDetalhe", 5));
 router.get("/canal-denuncia", authMiddleware, (req, res) => executeChartQuery(req, res, "canalDenuncia"));
+router.get("/casos-por-cor", authMiddleware, (req, res) => executeChartQuery(req, res, "corEtnia"));
+
+// =======================================================================
+// ROTA DE FAIXA ETÁRIA COM A CONSULTA SQL CORRIGIDA E ROBUSTA
+// =======================================================================
+router.get("/casos-por-faixa-etaria", authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const faixaEtariaExpression = `
+            CASE
+                WHEN (dados_completos->>'idade')::integer BETWEEN 0 AND 11 THEN 'Criança (0-11)'
+                WHEN (dados_completos->>'idade')::integer BETWEEN 12 AND 17 THEN 'Adolescente (12-17)'
+                WHEN (dados_completos->>'idade')::integer BETWEEN 18 AND 29 THEN 'Jovem (18-29)'
+                WHEN (dados_completos->>'idade')::integer BETWEEN 30 AND 59 THEN 'Adulto (30-59)'
+                WHEN (dados_completos->>'idade')::integer >= 60 THEN 'Idoso (60+)'
+                ELSE 'Não informado'
+            END
+        `;
+
+        const baseQuery = `
+            SELECT ${faixaEtariaExpression} AS name, COUNT(*) AS value
+            FROM casos
+            WHERE dados_completos->>'idade' ~ '^\\d+$' AND dados_completos->>'idade' IS NOT NULL AND dados_completos->>'idade' <> ''
+        `;
+        
+        let [query, params] = addDateFilter(baseQuery, [], req.query.mes);
+        
+        // CORREÇÃO: Repetimos a expressão completa no GROUP BY para garantir a compatibilidade e robustez
+        query += ` 
+            GROUP BY ${faixaEtariaExpression}
+            ORDER BY 
+                CASE ${faixaEtariaExpression}
+                    WHEN 'Criança (0-11)' THEN 1
+                    WHEN 'Adolescente (12-17)' THEN 2
+                    WHEN 'Jovem (18-29)' THEN 3
+                    WHEN 'Adulto (30-59)' THEN 4
+                    WHEN 'Idoso (60+)' THEN 5
+                    ELSE 6
+                END;
+        `;
+        
+        const result = await pool.query(query, params);
+        const dataFormatada = result.rows.map(row => ({ name: row.name, value: parseInt(row.value, 10) }));
+        res.json(dataFormatada);
+
+    } catch (err: any) {
+        console.error(`Erro ao buscar dados do gráfico para faixa etária:`, err.message);
+        res.status(500).json({ message: "Erro interno no servidor." });
+    }
+});
 
 export default router;
 
