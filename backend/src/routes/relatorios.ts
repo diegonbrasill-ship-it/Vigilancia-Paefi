@@ -1,14 +1,13 @@
 // backend/src/routes/relatorios.ts
 import { Router } from "express";
 import pool from "../db";
-import { authMiddleware, checkRole } from "../middleware/auth";
+import { authMiddleware } from "../middleware/auth";
 import { generateGeneralReportPDF } from "../services/report.service";
 
 const router = Router();
 
 // ROTA PARA GERAR O RELATÓRIO GERAL
-// Protegida para apenas coordenadores e gestores
-router.post("/geral", authMiddleware, checkRole(['coordenador', 'gestor']), async (req, res) => {
+router.post("/geral", authMiddleware, async (req, res) => {
     const { startDate, endDate } = req.body;
 
     if (!startDate || !endDate) {

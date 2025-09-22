@@ -6,7 +6,7 @@ import { Loader2, User, Lock } from "lucide-react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
-// 1. IMPORTAMOS O NOSSO HOOK useAuth
+// O hook useAuth é tudo que precisamos agora
 import { useAuth } from "@/contexts/AuthContext";
 
 // Imports dos componentes UI
@@ -15,12 +15,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
-// Imports de logos e serviços de API
+// Imports de logos
 import prefeituraLogo from "../assets/logos/prefeitura.png";
 import secretariaLogo from "../assets/logos/secretaria.png";
 import creasLogo from "../assets/logos/creas.png";
 import paefiLogo from "../assets/logos/paefi.png";
-import { login as apiLogin } from "../services/api";
+
+// 1. REMOVIDO: A importação direta da API não é mais necessária aqui.
+// import { login as apiLogin } from "../services/api";
 
 type LoginProps = {
   onLogin?: () => void;
@@ -32,24 +34,29 @@ export default function Login({ onLogin }: LoginProps) {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  // 2. PEGAMOS A FUNÇÃO DE LOGIN DO NOSSO CONTEXTO
+  // Pegamos a função de login do nosso contexto
   const { login } = useAuth();
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
+    
+    // Validação simples para evitar chamadas vazias
+    if (!username.trim() || !password) {
+        toast.error("Por favor, preencha o usuário e a senha.");
+        return;
+    }
+      
     setLoading(true);
     try {
-      // A chamada para a API continua a mesma
-      const res = await apiLogin(username.trim(), password);
-      
-      // 3. A LÓGICA DE SALVAR NO LOCALSTORAGE FOI SUBSTITUÍDA
-      // Agora, apenas chamamos a função 'login' do contexto,
-      // que fará todo o trabalho pesado para nós.
-      login(res.token, res.user);
+      // 2. ALTERADO: A lógica foi simplificada para uma única chamada.
+      // A função 'login' do nosso contexto agora faz tudo: chama a API,
+      // salva no localStorage e atualiza o estado da aplicação.
+      await login(username.trim(), password);
 
       toast.success("Login efetuado com sucesso");
       onLogin?.();
       navigate("/dashboard");
+
     } catch (err: any) {
       toast.error(err?.message || "Usuário ou senha inválidos");
     } finally {
@@ -115,7 +122,7 @@ export default function Login({ onLogin }: LoginProps) {
 
       <footer className="mt-8 text-center text-xs text-slate-400">
         <p>Secretaria de Desenvolvimento Social e Habitação • Prefeitura Municipal de Patos — PB</p>
-        <p>v1.0 • Data: 15/09/2025</p>
+        <p>v1.0 • Data: 22/09/2025</p>
       </footer>
     </div>
   );

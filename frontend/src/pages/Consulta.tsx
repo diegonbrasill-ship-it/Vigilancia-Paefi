@@ -5,7 +5,8 @@ import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 
 // 🔹 Serviços e componentes
-import { getCasos } from "../services/api";
+// 1. ALTERADO: Importamos a função correta que agora existe no nosso api.ts
+import { getCasosFiltrados } from "../services/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -15,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { FileSearch, Search } from "lucide-react";
 
 // ========================================================
-// 📌 Tipagem
+// 📌 Tipagem (sem alterações)
 // ========================================================
 type CasoNaLista = {
   id: number;
@@ -29,34 +30,26 @@ type CasoNaLista = {
 // 📌 Componente Principal
 // ========================================================
 export default function Consulta() {
-  // -------------------------
-  // Estados
-  // -------------------------
   const [casos, setCasos] = useState<CasoNaLista[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState(""); // termo de busca
+  const [searchTerm, setSearchTerm] = useState("");
 
-  // -------------------------
-  // Efeito: debounce da busca
-  // -------------------------
   useEffect(() => {
     const timerId = setTimeout(() => {
       fetchCasos();
     }, 300);
 
-    return () => clearTimeout(timerId); // limpa o timer se digitar novamente
+    return () => clearTimeout(timerId);
   }, [searchTerm]);
 
-  // -------------------------
-  // Função para buscar casos
-  // -------------------------
   const fetchCasos = async () => {
     setIsLoading(true);
     try {
-      // 🔹 Passa o termo da busca para a API
-      const data = await getCasos({ tecRef: searchTerm });
+      // 2. ALTERADO: Usamos a nova função getCasosFiltrados.
+      // A estrutura do filtro { tecRef: searchTerm } já é compatível.
+      const data = await getCasosFiltrados({ tecRef: searchTerm });
 
-      const casosFormatados = data.map((caso) => ({
+      const casosFormatados = data.map((caso: any) => ({
         ...caso,
         dataCad: new Date(caso.dataCad).toLocaleDateString("pt-BR", {
           timeZone: "UTC",
@@ -72,11 +65,10 @@ export default function Consulta() {
   };
 
   // ========================================================
-  // 📌 Renderização
+  // 📌 Renderização (sem alterações)
   // ========================================================
   return (
     <div className="space-y-6">
-      {/* Cabeçalho */}
       <header>
         <h1 className="text-2xl font-bold text-slate-800">
           Consultar Atendimentos
@@ -86,7 +78,6 @@ export default function Consulta() {
         </p>
       </header>
 
-      {/* Card principal */}
       <Card>
         <CardHeader>
           <CardTitle>Lista de Casos Registrados</CardTitle>
@@ -96,7 +87,6 @@ export default function Consulta() {
         </CardHeader>
 
         <CardContent>
-          {/* 🔍 Campo de busca */}
           <div className="mb-4 relative">
             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
@@ -107,7 +97,6 @@ export default function Consulta() {
             />
           </div>
 
-          {/* 📋 Tabela */}
           <div className="border rounded-md">
             <Table>
               <TableHeader>

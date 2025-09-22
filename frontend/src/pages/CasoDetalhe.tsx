@@ -82,8 +82,7 @@ export default function CasoDetalhe() {
   // -------------------------
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { user } = useAuth();
-
+  
   // -------------------------
   // Estados
   // -------------------------
@@ -308,10 +307,8 @@ export default function CasoDetalhe() {
             Voltar para a Lista de Casos
           </Link>
         </Button>
-
-        {/* CORREÇÃO: Botões de Ação agora são visíveis para todos, 
-            mas a API garantirá a segurança de quem pode executar a ação. */}
-        <div className="flex items-center gap-2">
+      </div>
+      <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => navigate(`/cadastro/${id}`)}>
                 <Pencil className="mr-2 h-4 w-4"/>
                 Editar Dados
@@ -332,8 +329,6 @@ export default function CasoDetalhe() {
               Excluir
             </Button>
         </div>
-      </div>
-
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">

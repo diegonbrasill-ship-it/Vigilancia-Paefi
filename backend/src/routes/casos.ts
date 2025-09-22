@@ -94,11 +94,6 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
         whereClauses.push(`status = $${params.length}`);
     }
 
-    if (user.role === 'tecnico') {
-      params.push(user.id);
-      whereClauses.push(`"userId" = $${params.length}`);
-    }
-
     if (tecRef && typeof tecRef === 'string') {
       params.push(`%${tecRef}%`);
       whereClauses.push(`"tecRef" ILIKE $${params.length}`);
@@ -189,10 +184,6 @@ router.get("/:id", authMiddleware, async (req: Request, res: Response) => {
     try {
         let query = 'SELECT * FROM casos WHERE id = $1';
         const params: (string | number)[] = [id];
-        if (user.role === 'tecnico') {
-            query += ' AND "userId" = $2';
-            params.push(user.id);
-        }
         const result = await pool.query(query, params);
         if (result.rowCount === 0) {
             return res.status(404).json({ message: "Caso não encontrado ou você não tem permissão para vê-lo." });
@@ -215,7 +206,7 @@ router.get("/:id", authMiddleware, async (req: Request, res: Response) => {
     }
 });
 
-router.patch("/:id/status", authMiddleware, checkRole(['coordenador', 'gestor']), async (req: Request, res: Response) => {
+router.patch("/:id/status", authMiddleware, async (req: Request, res: Response) => {
     const { id } = req.params;
     const { status } = req.body;
     const { id: userId, username } = req.user!;
@@ -243,7 +234,7 @@ router.patch("/:id/status", authMiddleware, checkRole(['coordenador', 'gestor'])
     }
 });
 
-router.delete("/:id", authMiddleware, checkRole(['coordenador', 'gestor']), async (req: Request, res: Response) => {
+router.delete("/:id", authMiddleware, async (req: Request, res: Response) => {
     const { id } = req.params;
     const { id: userId, username } = req.user!;
     try {

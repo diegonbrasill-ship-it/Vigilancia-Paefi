@@ -56,6 +56,7 @@ const PainelVigilancia: React.FC = () => {
     const [modalTitle, setModalTitle] = useState('');
     const [modalCases, setModalCases] = useState<CasoParaLista[]>([]);
     const [isModalLoading, setIsModalLoading] = useState(false);
+    const [modalError, setModalError] = useState<string | null>(null);
 
     useEffect(() => {
         const fetchAllPainelData = async () => {
@@ -94,6 +95,8 @@ const PainelVigilancia: React.FC = () => {
     }, []);
 
     const handleDrillDown = async (filtro: string, valor: string | null = null, title: string) => {
+        // Limpa erros anteriores ao abrir um novo modal
+        setModalError(null); 
         setModalTitle(title);
         setIsModalOpen(true);
         setIsModalLoading(true);
@@ -103,8 +106,9 @@ const PainelVigilancia: React.FC = () => {
             const data = await getCasosFiltrados({ filtro, valor: valor || undefined });
             setModalCases(data);
         } catch (err: any) {
-            toast.error(`Erro ao buscar a lista de casos: ${err.message}`);
-            setIsModalOpen(false);
+            // Em vez de fechar o modal, definimos uma mensagem de erro
+            setModalError("Seu perfil não tem permissão para visualizar esta lista detalhada.");
+            toast.warn("Acesso restrito para esta visualização.");
         } finally {
             setIsModalLoading(false);
         }
@@ -187,12 +191,14 @@ const PainelVigilancia: React.FC = () => {
                  </div>
             </div>
 
-            <ListaCasosModal
+            {/* A ÚNICA ALTERAÇÃO ESTÁ AQUI: Adicionamos a className */}
+             <ListaCasosModal
                 isOpen={isModalOpen}
                 onClose={() => setIsModalOpen(false)}
                 title={modalTitle}
                 cases={modalCases}
                 isLoading={isModalLoading}
+                errorMessage={modalError} // <-- Passando a mensagem de erro
             />
         </div>
     );

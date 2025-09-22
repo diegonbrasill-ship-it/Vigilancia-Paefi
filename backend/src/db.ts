@@ -7,7 +7,7 @@ const pool = new Pool({
   user: 'postgres',
   host: 'localhost',
   database: 'postgres',
-  password: 'senha123', // Lembre-se que esta é a senha que deve estar correta
+  password: 'senha123',
   port: 5433,
 });
 
@@ -72,10 +72,6 @@ export async function initDb() {
     `);
     console.log("Tabela 'acompanhamentos' verificada/criada.");
 
-    // ========================================================
-    // 📌 ADIÇÃO DAS NOVAS TABELAS
-    // ========================================================
-    
     // Tabela 'encaminhamentos'
     await client.query(`
       CREATE TABLE IF NOT EXISTS encaminhamentos (
@@ -109,6 +105,15 @@ export async function initDb() {
     `);
     console.log("Tabela 'anexos' verificada/criada.");
     
+    // =============================
+    // 📌 ÍNDICE GIN PARA PERFORMANCE
+    // =============================
+    await client.query(`
+      CREATE INDEX IF NOT EXISTS idx_casos_dados_completos_gin
+      ON casos USING GIN (dados_completos);
+    `);
+    console.log("Índice GIN em 'casos.dados_completos' verificado/criado.");
+
     // ========================================================
     // 📌 ATUALIZAÇÃO DO SEED DE USUÁRIOS
     // ========================================================
@@ -116,7 +121,7 @@ export async function initDb() {
       { username: "coordenador", password: "senha123", role: "coordenador" },
       { username: "gestor", password: "senha123", role: "gestor" },
       { username: "tecnico", password: "senha123", role: "tecnico" },
-      { username: "vigilancia", password: "senha123", role: "vigilancia" } // <-- Usuário adicionado
+      { username: "vigilancia", password: "senha123", role: "vigilancia" }
     ];
 
     for (const s of seeds) {

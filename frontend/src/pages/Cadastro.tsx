@@ -41,7 +41,6 @@ const formSchema = z.object({
   tecRef: z.string().min(3, "O nome do técnico é obrigatório."),
   tipoViolencia: z.string().optional(),
   localOcorrencia: z.string().optional(),
-  frequencia: z.string().optional(),
   nome: z.string().optional(),
   cpf: z.string().optional().refine(validateCPF, { message: "CPF inválido." }),
   nis: z
@@ -98,7 +97,7 @@ export default function Cadastro() {
   } = useForm<CasoForm>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      dataCad: "", tecRef: "", tipoViolencia: "", localOcorrencia: "", frequencia: "",
+      dataCad: "", tecRef: "", tipoViolencia: "", localOcorrencia: "", 
       nome: "", cpf: "", nis: "", idade: "", sexo: "", corEtnia: "", bairro: "",
       escolaridade: "", rendaFamiliar: "", recebePBF: "", recebeBPC: "", recebeBE: "",
       membrosCadUnico: "", membroPAI: "", composicaoFamiliar: "", tipoMoradia: "",
@@ -177,7 +176,7 @@ export default function Cadastro() {
 
   const handleFinalizeAndClear = () => {
     reset({
-        dataCad: "", tecRef: "", tipoViolencia: "", localOcorrencia: "", frequencia: "",
+        dataCad: "", tecRef: "", tipoViolencia: "", localOcorrencia: "",
         nome: "", cpf: "", nis: "", idade: "", sexo: "", corEtnia: "", bairro: "",
         escolaridade: "", rendaFamiliar: "", recebePBF: "", recebeBPC: "", recebeBE: "",
         membrosCadUnico: "", membroPAI: "", composicaoFamiliar: "", tipoMoradia: "",
@@ -243,10 +242,6 @@ export default function Cadastro() {
                   <div className="space-y-2">
                     <Label htmlFor="localOcorrencia">Local da Ocorrência</Label>
                     <Input id="localOcorrencia" {...register("localOcorrencia")} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="frequencia">Frequência</Label>
-                    <Input id="frequencia" {...register("frequencia")} />
                   </div>
                 </div>
               </TabsContent>

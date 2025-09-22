@@ -69,3 +69,7 @@
 .painel-row:first-of-type {
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
 }
+
+.modal-em-destaque {
+  z-index: 2000;
+}

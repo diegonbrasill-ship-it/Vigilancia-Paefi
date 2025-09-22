@@ -4,27 +4,35 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Button } from "@/components/ui/button";
 import { Loader2, Eye } from "lucide-react";
 
-// 📌 Tipagem para os dados que o modal recebe
 interface CasoParaLista {
   id: number;
-  nome?: string; // O nome é opcional, pois pode vir nulo para o perfil Vigilância
+  nome?: string;
   tecRef: string;
   dataCad: string;
   bairro?: string;
 }
 
+// A prop 'className' foi removida para simplificar
 interface ListaCasosModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
   cases: CasoParaLista[];
   isLoading: boolean;
+  errorMessage?: string | null;
 }
 
 export default function ListaCasosModal({ isOpen, onClose, title, cases, isLoading }: ListaCasosModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+      {/* 📌 A CORREÇÃO ESTÁ AQUI 
+        Adicionamos a propriedade 'style' para forçar o z-index.
+        Isso garante que o modal sempre apareça na frente de outros elementos, como o mapa.
+      */}
+      <DialogContent 
+        className="max-w-4xl h-[80vh] flex flex-col" 
+        style={{ zIndex: 2000 }}
+      >
         <DialogHeader>
           <DialogTitle className="text-2xl">{title}</DialogTitle>
           <DialogDescription>
@@ -56,7 +64,6 @@ export default function ListaCasosModal({ isOpen, onClose, title, cases, isLoadi
                   cases.map((caso) => (
                     <TableRow key={caso.id}>
                       <TableCell className="font-medium">{caso.id}</TableCell>
-                      {/* Lógica para anonimização: Se não houver nome, mostra um traço */}
                       <TableCell>{caso.nome || '---'}</TableCell>
                       <TableCell>{caso.tecRef}</TableCell>
                       <TableCell>{caso.bairro || 'Não informado'}</TableCell>
