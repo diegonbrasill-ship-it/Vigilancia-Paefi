@@ -1,15 +1,17 @@
 // frontend/src/components/Layout.tsx
 
 import { Outlet, Link, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext"; // 1. IMPORTAMOS O NOSSO HOOK useAuth
-import { LayoutDashboard, PlusCircle, Search, User, LogOut, BarChart3, Settings, FileText, Users } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+// 1. Adicionado o ícone 'Inbox' para o novo menu
+import { LayoutDashboard, PlusCircle, Search, User, LogOut, BarChart3, Settings, FileText, Users, Inbox } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 
-// Itens do menu agrupados por contexto (sem alterações)
+// 2. Adicionado o novo item de menu "Gestão de Demandas"
 const navItemsAtendimento = [
   { href: "/cadastro", icon: PlusCircle, label: "Coleta de Dados" },
   { href: "/consulta", icon: Search, label: "Consultar Caso" },
+  { href: "/demandas", icon: Inbox, label: "Gestão de Demandas" }, // <-- NOVO ITEM
 ];
 const navItemsAnalise = [
     { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
@@ -25,17 +27,13 @@ const navItemsAdmin = [
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-
-  // 2. UTILIZAMOS O useAuth PARA PEGAR AS INFORMAÇÕES E FUNÇÕES
   const { user, logout } = useAuth();
 
   const handleLogout = () => {
-    logout(); // A função de logout agora vem do nosso contexto
+    logout();
     navigate('/login');
   };
   
-  // 3. A LÓGICA DE LER O LOCALSTORAGE FOI REMOVIDA
-  // Agora pegamos as informações diretamente do 'user' fornecido pelo contexto.
   const username = user?.username || "Usuário";
   const userRole = user?.role || null;
 
@@ -44,10 +42,10 @@ export default function Layout() {
       {/* SIDEBAR */}
       <aside className="w-64 bg-white border-r flex flex-col shadow-sm">
         <div className="p-4 border-b flex items-center gap-3">
-          <img src="/logos/paefi.png" alt="PAEFI Logo" className="h-10" />
+          <img src="/logos/rmsuas-logo.svg" alt="RMSUAS Logo" className="h-10" />
           <div>
-            <h1 className="text-base font-bold text-slate-800">Vigilância SUAS</h1>
-            <p className="text-xs text-slate-500">PAEFI - Patos/PB</p>
+            <h1 className="text-base font-bold text-slate-800">RMSUAS</h1>
+            <p className="text-xs text-slate-500">Patos/PB</p>
           </div>
         </div>
         
@@ -56,7 +54,7 @@ export default function Layout() {
           <div>
             <h2 className="px-3 mb-1 text-xs font-semibold text-slate-400 uppercase tracking-wider">Atendimento</h2>
             {navItemsAtendimento.map((item) => {
-              const isActive = location.pathname === item.href;
+              const isActive = location.pathname.startsWith(item.href);
               return (
                 <Link key={item.label} to={item.href}
                   className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
@@ -88,7 +86,7 @@ export default function Layout() {
             })}
           </div>
 
-          {/* GRUPO DE ADMINISTRAÇÃO (A lógica de permissão agora usa userRole do contexto) */}
+          {/* GRUPO DE ADMINISTRAÇÃO */}
           {userRole && ['coordenador', 'gestor'].includes(userRole) && (
             <div>
               <h2 className="px-3 mb-1 text-xs font-semibold text-slate-400 uppercase tracking-wider">Administração</h2>

@@ -338,7 +338,7 @@ export default function CasoDetalhe() {
             )}
           </div>
           <CardDescription>
-            Prontuário de Atendimento PAEFI | Cadastrado em:{" "}
+            Prontuário de Atendimento | Cadastrado em:{" "}
             {dataCadastroFormatada} por {caso.tecRef}
           </CardDescription>
         </CardHeader>

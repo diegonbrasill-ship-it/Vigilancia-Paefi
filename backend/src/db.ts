@@ -1,4 +1,3 @@
-// backend/src/db.ts
 import { Pool } from "pg";
 import bcrypt from "bcryptjs";
 
@@ -23,7 +22,7 @@ export async function initDb() {
   console.log("🐘 Conectado ao PostgreSQL com sucesso!");
 
   try {
-    // Tabela 'users', 100% preservada
+    // Tabela 'users'
     await client.query(`
       CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
@@ -34,20 +33,21 @@ export async function initDb() {
     `);
     console.log("Tabela 'users' verificada/criada.");
     
-    // Tabela 'casos', 100% preservada
+    // Tabela 'casos'
     await client.query(`
       CREATE TABLE IF NOT EXISTS casos (
         id SERIAL PRIMARY KEY,
         "dataCad" DATE NOT NULL,
         "tecRef" TEXT NOT NULL,
         nome TEXT, 
+        status VARCHAR(50) NOT NULL DEFAULT 'Ativo',
         dados_completos JSONB,
         "userId" INTEGER NOT NULL REFERENCES users(id)
       );
     `);
     console.log("Tabela 'casos' verificada/criada.");
 
-    // Tabela 'logs', 100% preservada
+    // Tabela 'logs'
     await client.query(`
       CREATE TABLE IF NOT EXISTS logs (
         id SERIAL PRIMARY KEY,
@@ -60,7 +60,7 @@ export async function initDb() {
     `);
     console.log("Tabela 'logs' verificada/criada.");
     
-    // Tabela 'acompanhamentos', 100% preservada
+    // Tabela 'acompanhamentos'
     await client.query(`
       CREATE TABLE IF NOT EXISTS acompanhamentos (
         id SERIAL PRIMARY KEY,
@@ -92,7 +92,7 @@ export async function initDb() {
     await client.query(`
       CREATE TABLE IF NOT EXISTS anexos (
           id SERIAL PRIMARY KEY,
-          "casoId" INTEGER NOT NULL REFERENCES casos(id) ON DELETE CASCADE,
+          "casoId" INTEGER REFERENCES casos(id) ON DELETE CASCADE,
           "userId" INTEGER NOT NULL REFERENCES users(id),
           "nomeOriginal" VARCHAR(255) NOT NULL,
           "nomeArmazenado" VARCHAR(255) NOT NULL UNIQUE,
@@ -105,8 +105,37 @@ export async function initDb() {
     `);
     console.log("Tabela 'anexos' verificada/criada.");
     
+    // ========================================================
+    // 📌 NOVA TABELA: demandas
+    // ========================================================
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS demandas (
+        id SERIAL PRIMARY KEY,
+        tipo_documento VARCHAR(100) NOT NULL,
+        instituicao_origem TEXT NOT NULL,
+        numero_documento VARCHAR(100),
+        data_recebimento DATE NOT NULL,
+        prazo_resposta DATE,
+        assunto TEXT,
+        status VARCHAR(50) NOT NULL DEFAULT 'Nova',
+        caso_associado_id INTEGER REFERENCES casos(id) ON DELETE SET NULL,
+        tecnico_designado_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        registrado_por_id INTEGER NOT NULL REFERENCES users(id),
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log("Tabela 'demandas' verificada/criada.");
+
+    // Ajuste na tabela 'anexos' para permitir anexos em demandas
+    // Usamos ALTER TABLE para adicionar a coluna sem apagar a tabela.
+    await client.query(`
+      ALTER TABLE anexos
+      ADD COLUMN IF NOT EXISTS "demandaId" INTEGER REFERENCES demandas(id) ON DELETE CASCADE;
+    `);
+    console.log("Tabela 'anexos' verificada/atualizada com coluna para demandas.");
+
     // =============================
-    // 📌 ÍNDICE GIN PARA PERFORMANCE
+    // ÍNDICE GIN PARA PERFORMANCE
     // =============================
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_casos_dados_completos_gin
@@ -115,7 +144,7 @@ export async function initDb() {
     console.log("Índice GIN em 'casos.dados_completos' verificado/criado.");
 
     // ========================================================
-    // 📌 ATUALIZAÇÃO DO SEED DE USUÁRIOS
+    // SEED DE USUÁRIOS
     // ========================================================
     const seeds = [
       { username: "coordenador", password: "senha123", role: "coordenador" },
@@ -136,7 +165,7 @@ export async function initDb() {
     }
 
     isDbInitialized = true;
-  } catch (err) {
+  } catch (err: any) {
     console.error("Erro durante a inicialização do banco de dados:", err);
     throw err;
   } finally {

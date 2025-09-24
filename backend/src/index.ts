@@ -6,6 +6,8 @@ import bodyParser from "body-parser";
 import cookieParser from "cookie-parser";
 import path from "path";
 import { initDb } from "./db";
+
+// Importações das Rotas
 import authRoutes from "./routes/auth";
 import newsRoutes from "./routes/news";
 import usersRoutes from "./routes/users";
@@ -14,17 +16,19 @@ import dashboardRoutes from './routes/dashboard';
 import acompanhamentosRoutes from "./routes/acompanhamentos";
 import relatoriosRoutes from "./routes/relatorios";
 import vigilanciaRoutes from './routes/vigilancia';
-import encaminhamentosRoutes from "./routes/encaminhamentos"; // <-- ADICIONE ESTA LINHA
+import encaminhamentosRoutes from "./routes/encaminhamentos";
 import anexosRoutes from "./routes/anexos";
+// 1. IMPORTAÇÃO da nova rota de demandas
+import demandasRoutes from "./routes/demandas"; 
 
-// Suas rotas do mural, 100% preservadas
+// Rotas do mural
 import prefeituraRoutes from "./routes/prefeitura";
 import mdsRoutes from "./routes/mds";
 import instagramRoutes from "./routes/instagram";
 
 const app = express();
 
-// Sua configuração de CORS e outros middlewares, 100% preservada
+// Configuração de CORS e outros middlewares
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || "http://localhost:5173";
 app.use(cors({ origin: FRONTEND_ORIGIN, credentials: true }));
 app.use(bodyParser.json());
@@ -37,7 +41,7 @@ const PORT = process.env.PORT || 4000;
   try {
     await initDb();
 
-    // Rotas de Autenticação e Gerenciamento, 100% preservadas
+    // Rotas de Autenticação e Gerenciamento
     app.use("/auth", authRoutes);
     app.use("/api/users", usersRoutes);
     app.use("/api/casos", casosRoutes);
@@ -45,12 +49,14 @@ const PORT = process.env.PORT || 4000;
     app.use('/api/vigilancia', vigilanciaRoutes);
     app.use("/api/acompanhamentos", acompanhamentosRoutes);
     app.use("/api/relatorios", relatoriosRoutes);
-    app.use("/api/vigilancia", vigilanciaRoutes); // <-- 2. REGISTRO DA NOVA ROTA
-    app.use("/api/encaminhamentos", encaminhamentosRoutes); // <-- ADICIONE ESTA LINHA
+    app.use("/api/encaminhamentos", encaminhamentosRoutes);
     app.use("/api/anexos", anexosRoutes);
+    // 2. REGISTRO da nova rota de demandas
+    app.use("/api/demandas", demandasRoutes);
     
+    // CORREÇÃO: Removida rota de vigilância duplicada que existia aqui.
 
-    // Suas rotas do Mural, 100% preservadas
+    // Rotas do Mural
     app.use("/news", newsRoutes);
     app.use("/api/prefeitura", prefeituraRoutes);
     app.use("/api/mds", mdsRoutes);

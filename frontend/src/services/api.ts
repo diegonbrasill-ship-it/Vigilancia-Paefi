@@ -5,7 +5,8 @@ const API_BASE_URL = "http://localhost:4000";
 // --- TIPOS DE DADOS ---
 type LoginResponse = { message: string; token: string; user: { id: number; username: string; role: string; }; };
 type ChartData = { name: string; value: number; };
-export interface DashboardData {
+
+export interface DashboardApiDataType {
     indicadores: {
         totalAtendimentos: number;
         novosNoMes: number;
@@ -38,56 +39,61 @@ export interface DashboardData {
         casosPorFaixaEtaria: ChartData[];
     };
 }
+
+export interface ApiResponse {
+    dados: DashboardApiDataType;
+    opcoesFiltro: {
+        meses: string[];
+        tecnicos: string[];
+        bairros: string[];
+    };
+}
+
 interface FiltrosCasos {
     filtro?: string;
     valor?: string;
     tecRef?: string;
+    mes?: string;
 }
 
-// =======================================================================
-// 1. A NOVA FUNÇÃO "MESTRE" fetchWithAuth
-// Esta função é agora a ÚNICA que acessa o localStorage.
-// Ela é inteligente o suficiente para lidar com JSON, FormData e downloads.
-// =======================================================================
+export interface Demanda {
+    id: number;
+    tipo_documento: string;
+    instituicao_origem: string;
+    data_recebimento: string;
+    prazo_resposta?: string;
+    status: string;
+    nome_caso?: string;
+    caso_id?: number;
+    tecnico_designado: string;
+    registrado_por: string;
+}
+
+// Função "Mestre" fetchWithAuth (sem alterações)
 async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
     const token = localStorage.getItem('token');
-    // A verificação de token agora é feita em um só lugar.
     if (!token) throw new Error('Usuário não autenticado. Por favor, faça o login novamente.');
-
     const headers = new Headers(options.headers || {});
     headers.set('Authorization', `Bearer ${token}`);
-
-    // Evita definir Content-Type para FormData, o navegador faz isso automaticamente
     if (!(options.body instanceof FormData)) {
         headers.set('Content-Type', 'application/json');
     }
-
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        ...options,
-        headers,
-    });
-
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, { ...options, headers });
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: `Erro ${response.status}: ${response.statusText}` }));
         throw new Error(errorData.message || 'Ocorreu um erro na requisição');
     }
-
-    // Para downloads, retornamos a resposta bruta para extrair o blob e o nome do arquivo
     const contentType = response.headers.get('content-type');
-    if (contentType && (contentType.includes('application/pdf') || contentType.includes('application/octet-stream') || contentType.includes('application/vnd.openxmlformats-officedocument'))) {
+    if (contentType && (contentType.includes('application/pdf') || contentType.includes('application/octet-stream'))) {
         return response;
     }
-    
-    // Para a maioria das chamadas, retornamos o JSON diretamente
     return response.json();
 }
 
-// =======================================================================
-// 2. FUNÇÕES DA API REATORADAS (MUITO MAIS LIMPAS)
-// =======================================================================
 
-// --- AUTENTICAÇÃO ---
-// A função de login não precisa de token, então ela continua separada
+// --- FUNÇÕES DA API ---
+
+// AUTENTICAÇÃO
 export async function login(username: string, password: string): Promise<LoginResponse> {
     const res = await fetch(`${API_BASE_URL}/auth/login`, {
         method: 'POST',
@@ -99,32 +105,40 @@ export async function login(username: string, password: string): Promise<LoginRe
     return data;
 }
 
-// --- CASOS ---
+// CASOS
 export const createCase = (casoData: any) => fetchWithAuth('/api/casos', { method: 'POST', body: JSON.stringify(casoData) });
 export const updateCase = (id: number | string, casoData: any) => fetchWithAuth(`/api/casos/${id}`, { method: 'PUT', body: JSON.stringify(casoData) });
 export const updateCasoStatus = (casoId: string | number, status: string) => fetchWithAuth(`/api/casos/${casoId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
 export const deleteCaso = (casoId: string | number) => fetchWithAuth(`/api/casos/${casoId}`, { method: 'DELETE' });
 export const getCasoById = (id: string) => fetchWithAuth(`/api/casos/${id}`);
-export const getCasosFiltrados = (filters?: FiltrosCasos) => {
+export const getCasosFiltrados = (filters?: FiltrosCasos): Promise<any[]> => {
     const params = new URLSearchParams();
     if (filters) {
         if (filters.filtro) params.append('filtro', filters.filtro);
         if (filters.valor) params.append('valor', filters.valor);
         if (filters.tecRef) params.append('tecRef', filters.tecRef);
+        if (filters.mes) params.append('mes', filters.mes);
     }
     return fetchWithAuth(`/api/casos?${params.toString()}`);
 };
 
-// --- ACOMPANHAMENTOS ---
+// 📌 NOVA FUNÇÃO para a busca de casos por Nome ou NIS no formulário de demandas
+export const searchCasosByTerm = (searchTerm: string): Promise<any[]> => {
+    const params = new URLSearchParams({ q: searchTerm });
+    return fetchWithAuth(`/api/casos?${params.toString()}`);
+};
+
+
+// ACOMPANHAMENTOS
 export const getAcompanhamentos = (casoId: string) => fetchWithAuth(`/api/acompanhamentos/${casoId}`);
 export const createAcompanhamento = (casoId: string, texto: string) => fetchWithAuth(`/api/acompanhamentos/${casoId}`, { method: 'POST', body: JSON.stringify({ texto }) });
 
-// --- ENCAMINHAMENTOS ---
+// ENCAMINHAMENTOS
 export const getEncaminhamentos = (casoId: string) => fetchWithAuth(`/api/casos/${casoId}/encaminhamentos`);
 export const createEncaminhamento = (data: object) => fetchWithAuth('/api/encaminhamentos', { method: 'POST', body: JSON.stringify(data) });
 export const updateEncaminhamento = (id: number, data: object) => fetchWithAuth(`/api/encaminhamentos/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
-// --- ANEXOS ---
+// ANEXOS
 export const getAnexos = (casoId: string) => fetchWithAuth(`/api/anexos/casos/${casoId}`);
 export const uploadAnexo = (casoId: string, formData: FormData) => fetchWithAuth(`/api/anexos/upload/${casoId}`, { method: 'POST', body: formData });
 export async function downloadAnexo(anexoId: number): Promise<{ blob: Blob, filename: string }> {
@@ -141,31 +155,43 @@ export async function downloadAnexo(anexoId: number): Promise<{ blob: Blob, file
     return { blob, filename };
 }
 
-// --- USUÁRIOS ---
+// USUÁRIOS
 export const getUsers = () => fetchWithAuth('/api/users');
 export const createUser = (data: object) => fetchWithAuth('/api/users', { method: 'POST', body: JSON.stringify(data) });
 
-// --- RELATÓRIOS ---
+// RELATÓRIOS
 export async function generateReport(filters: { startDate: string, endDate: string }): Promise<Blob> {
-    const response = await fetchWithAuth('/api/relatorios/geral', { method: 'POST', body: JSON.stringify(filters) }) as Response;
+    const response = await fetchWithAuth('/api/relatorios/geral', { 
+        method: 'POST', 
+        body: JSON.stringify(filters) 
+    }) as Response;
     return response.blob();
 }
 
-// --- DASHBOARD ---
-export const getDashboardFilterOptions = (): Promise<{ meses: string[] }> => fetchWithAuth('/api/dashboard/filter-options');
-export const getDashboardData = (filters?: { mes?: string }): Promise<DashboardData> => {
-    const url = new URL(`${API_BASE_URL}/api/dashboard`);
-    if (filters?.mes) {
-        url.searchParams.append('mes', filters.mes);
-    }
-    // Usamos o endpoint completo aqui porque URLSearchParams já foi usado
-    return fetchWithAuth(url.pathname + url.search);
+// DASHBOARD
+export const getDashboardData = (filters?: { mes?: string, tecRef?: string, bairro?: string }): Promise<ApiResponse> => {
+    const params = new URLSearchParams();
+    if (filters?.mes) params.append('mes', filters.mes);
+    if (filters?.tecRef) params.append('tecRef', filters.tecRef);
+    if (filters?.bairro) params.append('bairro', filters.bairro);
+    return fetchWithAuth(`/api/dashboard?${params.toString()}`);
 };
 
-// --- PAINEL DE VIGILÂNCIA ---
+// PAINEL DE VIGILÂNCIA
 export const getVigilanciaFluxoDemanda = () => fetchWithAuth('/api/vigilancia/fluxo-demanda');
 export const getVigilanciaSobrecargaEquipe = () => fetchWithAuth('/api/vigilancia/sobrecarga-equipe');
 export const getVigilanciaIncidenciaBairros = () => fetchWithAuth('/api/vigilancia/incidencia-bairros');
 export const getVigilanciaFontesAcionamento = () => fetchWithAuth('/api/vigilancia/fontes-acionamento');
 export const getVigilanciaTaxaReincidencia = () => fetchWithAuth('/api/vigilancia/taxa-reincidencia');
 export const getVigilanciaPerfilViolacoes = () => fetchWithAuth('/api/vigilancia/perfil-violacoes');
+
+// DEMANDAS
+export const getDemandas = (): Promise<Demanda[]> => {
+    return fetchWithAuth('/api/demandas');
+};
+export const createDemanda = (demandaData: object): Promise<any> => {
+    return fetchWithAuth('/api/demandas', {
+        method: 'POST',
+        body: JSON.stringify(demandaData),
+    });
+};

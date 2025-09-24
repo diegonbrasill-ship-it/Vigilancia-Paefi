@@ -82,7 +82,8 @@ router.put("/:id", authMiddleware, async (req: Request, res: Response) => {
 
 router.get("/", authMiddleware, async (req: Request, res: Response) => {
   const user = req.user!;
-  const { tecRef, filtro, valor, status = 'Ativo' } = req.query;
+  // 1. ADICIONADO: Novo parâmetro 'q' para busca genérica
+  const { q, tecRef, filtro, valor, status = 'Ativo' } = req.query;
 
   try {
     let query = 'SELECT id, "dataCad", "tecRef", nome, status, dados_completos->>\'bairro\' as bairro FROM casos';
@@ -95,58 +96,32 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
     }
 
     if (tecRef && typeof tecRef === 'string') {
-      params.push(`%${tecRef}%`);
-      whereClauses.push(`"tecRef" ILIKE $${params.length}`);
+        params.push(`%${tecRef}%`);
+        whereClauses.push(`"tecRef" ILIKE $${params.length}`);
     }
     
+    // 2. ADICIONADO: Lógica para a busca genérica por Nome ou NIS
+    if (q && typeof q === 'string') {
+        params.push(`%${q}%`);
+        // Procura no campo 'nome' OU no campo 'nis' dentro do JSONB
+        whereClauses.push(`(nome ILIKE $${params.length} OR dados_completos->>'nis' ILIKE $${params.length})`);
+    }
+
     if (filtro && typeof filtro === 'string') {
         switch (filtro) {
             case 'todos':
                 whereClauses = whereClauses.filter(c => !c.startsWith('status'));
                 if (params.includes('Ativo')) params.splice(params.indexOf('Ativo'), 1);
                 break;
-            case 'novos_no_mes':
-                whereClauses.push(`"dataCad" >= date_trunc('month', current_date)`);
-                break;
-            case 'reincidentes':
-                whereClauses.push(`LOWER(dados_completos->>'reincidente') = 'sim'`);
-                break;
-            case 'inseridos_paefi':
-                whereClauses.push(`LOWER(dados_completos->>'inseridoPAEFI') = 'sim'`);
-                break;
-            case 'por_bairro':
-                if (valor && typeof valor === 'string') {
-                    params.push(valor);
-                    whereClauses.push(`dados_completos->>'bairro' = $${params.length}`);
-                }
-                break;
-            case 'por_violencia':
-                 if (valor && typeof valor === 'string') {
-                    params.push(valor);
-                    whereClauses.push(`dados_completos->>'tipoViolencia' = $${params.length}`);
-                }
-                break;
-            case 'por_canal':
-                 if (valor && typeof valor === 'string') {
-                    params.push(valor);
-                    whereClauses.push(`dados_completos->>'canalDenuncia' = $${params.length}`);
-                }
-                break;
-            case 'por_sexo':
-                if (valor && typeof valor === 'string') {
-                    params.push(valor);
-                    whereClauses.push(`dados_completos->>'sexo' = $${params.length}`);
-                }
-                break;
-            // =======================================================================
-            // ADIÇÃO DOS NOVOS FILTROS PARA OS NOVOS GRÁFICOS
-            // =======================================================================
-            case 'por_cor_etnia':
-                if (valor && typeof valor === 'string') {
-                    params.push(valor);
-                    whereClauses.push(`dados_completos->>'corEtnia' = $${params.length}`);
-                }
-                break;
+            // (O restante do switch case continua o mesmo)
+            case 'novos_no_mes': whereClauses.push(`"dataCad" >= date_trunc('month', current_date)`); break;
+            case 'reincidentes': whereClauses.push(`LOWER(dados_completos->>'reincidente') = 'sim'`); break;
+            case 'inseridos_paefi': whereClauses.push(`LOWER(dados_completos->>'inseridoPAEFI') = 'sim'`); break;
+            case 'por_bairro': if (valor && typeof valor === 'string') { params.push(valor); whereClauses.push(`dados_completos->>'bairro' = $${params.length}`); } break;
+            case 'por_violencia': if (valor && typeof valor === 'string') { params.push(valor); whereClauses.push(`dados_completos->>'tipoViolencia' = $${params.length}`); } break;
+            case 'por_canal': if (valor && typeof valor === 'string') { params.push(valor); whereClauses.push(`dados_completos->>'canalDenuncia' = $${params.length}`); } break;
+            case 'por_sexo': if (valor && typeof valor === 'string') { params.push(valor); whereClauses.push(`dados_completos->>'sexo' = $${params.length}`); } break;
+            case 'por_cor_etnia': if (valor && typeof valor === 'string') { params.push(valor); whereClauses.push(`dados_completos->>'corEtnia' = $${params.length}`); } break;
             case 'por_faixa_etaria':
                 if (valor && typeof valor === 'string') {
                     let condition = '';
@@ -155,10 +130,17 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
                     if (valor.includes('18-29')) condition = `(dados_completos->>'idade')::integer BETWEEN 18 AND 29`;
                     if (valor.includes('30-59')) condition = `(dados_completos->>'idade')::integer BETWEEN 30 AND 59`;
                     if (valor.includes('60+')) condition = `(dados_completos->>'idade')::integer >= 60`;
-                    
                     if(condition) whereClauses.push(condition);
                 }
                 break;
+            case 'recebem_bolsa_familia': whereClauses.push(`LOWER(dados_completos->>'recebePBF') = 'sim'`); break;
+            case 'recebem_bpc': whereClauses.push(`dados_completos->>'recebeBPC' IN ('Idoso', 'PCD')`); break;
+            case 'violencia_confirmada': whereClauses.push(`LOWER(dados_completos->>'confirmacaoViolencia') = 'confirmada'`); break;
+            case 'notificados_sinan': whereClauses.push(`LOWER(dados_completos->>'notificacaoSINAM') = 'sim'`); break;
+            case 'dependencia_financeira': whereClauses.push(`LOWER(dados_completos->>'dependeFinanceiro') = 'sim'`); break;
+            case 'vitima_pcd': whereClauses.push(`LOWER(dados_completos->>'vitimaPCD') = 'sim'`); break;
+            case 'membro_carcerario': whereClauses.push(`LOWER(dados_completos->>'membroCarcerario') = 'sim'`); break;
+            case 'membro_socioeducacao': whereClauses.push(`LOWER(dados_completos->>'membroSocioeducacao') = 'sim'`); break;
         }
     }
     
@@ -191,12 +173,8 @@ router.get("/:id", authMiddleware, async (req: Request, res: Response) => {
         const casoBase = result.rows[0];
         const casoCompleto = {
             ...casoBase.dados_completos,
-            id: casoBase.id,
-            dataCad: casoBase.dataCad,
-            tecRef: casoBase.tecRef,
-            nome: casoBase.nome,
-            userId: casoBase.userId,
-            status: casoBase.status
+            id: casoBase.id, dataCad: casoBase.dataCad, tecRef: casoBase.tecRef,
+            nome: casoBase.nome, userId: casoBase.userId, status: casoBase.status
         };
         const dadosProcessados = anonimizarDadosSeNecessario(user, casoCompleto);
         res.json(dadosProcessados);

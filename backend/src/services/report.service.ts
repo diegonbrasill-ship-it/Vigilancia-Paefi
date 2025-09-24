@@ -24,7 +24,7 @@ export async function generateGeneralReportPDF(casos: CasoParaRelatorio[]): Prom
         });
 
         // Cabeçalho do Documento
-        doc.fontSize(18).text('Relatório Geral de Atendimentos - PAEFI', { align: 'center' });
+        doc.fontSize(18).text('Relatório Geral de Atendimentos', { align: 'center' });
         doc.fontSize(10).text(`Gerado em: ${new Date().toLocaleDateString('pt-BR')} ${new Date().toLocaleTimeString('pt-BR')}`, { align: 'center' });
         doc.moveDown(2);
 
