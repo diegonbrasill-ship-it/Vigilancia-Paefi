@@ -69,7 +69,18 @@ export interface Demanda {
     registrado_por: string;
 }
 
-// Função "Mestre" fetchWithAuth (sem alterações)
+export interface DemandaDetalhada extends Demanda {
+    numero_documento?: string;
+    assunto?: string;
+    // 📌 CORREÇÃO: Adicionada a propriedade que estava faltando
+    caso_associado_id?: number; 
+    tecnico_designado_id: number;
+    registrado_por_id: number;
+    created_at: string;
+}
+
+
+// Função "Mestre" fetchWithAuth
 async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
     const token = localStorage.getItem('token');
     if (!token) throw new Error('Usuário não autenticado. Por favor, faça o login novamente.');
@@ -121,13 +132,10 @@ export const getCasosFiltrados = (filters?: FiltrosCasos): Promise<any[]> => {
     }
     return fetchWithAuth(`/api/casos?${params.toString()}`);
 };
-
-// 📌 NOVA FUNÇÃO para a busca de casos por Nome ou NIS no formulário de demandas
 export const searchCasosByTerm = (searchTerm: string): Promise<any[]> => {
     const params = new URLSearchParams({ q: searchTerm });
     return fetchWithAuth(`/api/casos?${params.toString()}`);
 };
-
 
 // ACOMPANHAMENTOS
 export const getAcompanhamentos = (casoId: string) => fetchWithAuth(`/api/acompanhamentos/${casoId}`);
@@ -139,7 +147,7 @@ export const createEncaminhamento = (data: object) => fetchWithAuth('/api/encami
 export const updateEncaminhamento = (id: number, data: object) => fetchWithAuth(`/api/encaminhamentos/${id}`, { method: 'PUT', body: JSON.stringify(data) });
 
 // ANEXOS
-export const getAnexos = (casoId: string) => fetchWithAuth(`/api/anexos/casos/${casoId}`);
+export const getAnexosByCasoId = (casoId: string) => fetchWithAuth(`/api/anexos/casos/${casoId}`);
 export const uploadAnexo = (casoId: string, formData: FormData) => fetchWithAuth(`/api/anexos/upload/${casoId}`, { method: 'POST', body: formData });
 export async function downloadAnexo(anexoId: number): Promise<{ blob: Blob, filename: string }> {
     const response = await fetchWithAuth(`/api/anexos/download/${anexoId}`) as Response;
@@ -186,12 +194,8 @@ export const getVigilanciaTaxaReincidencia = () => fetchWithAuth('/api/vigilanci
 export const getVigilanciaPerfilViolacoes = () => fetchWithAuth('/api/vigilancia/perfil-violacoes');
 
 // DEMANDAS
-export const getDemandas = (): Promise<Demanda[]> => {
-    return fetchWithAuth('/api/demandas');
-};
-export const createDemanda = (demandaData: object): Promise<any> => {
-    return fetchWithAuth('/api/demandas', {
-        method: 'POST',
-        body: JSON.stringify(demandaData),
-    });
+export const getDemandas = (): Promise<Demanda[]> => fetchWithAuth('/api/demandas');
+export const createDemanda = (demandaData: object): Promise<any> => fetchWithAuth('/api/demandas', { method: 'POST', body: JSON.stringify(demandaData) });
+export const getDemandaById = (id: string | number): Promise<DemandaDetalhada> => {
+    return fetchWithAuth(`/api/demandas/${id}`);
 };

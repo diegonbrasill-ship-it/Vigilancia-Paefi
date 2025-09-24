@@ -11,8 +11,6 @@ router.use(authMiddleware);
 // ROTA: Listar todas as demandas (GET /api/demandas)
 router.get("/", async (req: Request, res: Response) => {
     try {
-        // Uma consulta SQL que junta informações de 'demandas', 'casos' e 'users'
-        // para termos uma lista completa e informativa.
         const query = `
             SELECT
                 d.id,
@@ -54,7 +52,6 @@ router.post("/", async (req: Request, res: Response) => {
 
     const registrado_por_id = req.user!.id;
 
-    // Validação básica
     if (!tipo_documento || !instituicao_origem || !data_recebimento || !tecnico_designado_id) {
         return res.status(400).json({ message: "Campos obrigatórios estão faltando." });
     }
@@ -86,6 +83,48 @@ router.post("/", async (req: Request, res: Response) => {
     }
 });
 
-// (Aqui podemos adicionar as rotas GET /:id, PUT /:id, DELETE /:id no futuro)
+// =======================================================================
+// 📌 NOVA ROTA: Buscar uma demanda específica por ID (GET /api/demandas/:id)
+// =======================================================================
+router.get("/:id", async (req: Request, res: Response) => {
+    const { id } = req.params;
+
+    try {
+        const query = `
+            SELECT
+                d.id,
+                d.tipo_documento,
+                d.instituicao_origem,
+                d.numero_documento,
+                d.data_recebimento,
+                d.prazo_resposta,
+                d.assunto,
+                d.status,
+                d.caso_associado_id,
+                c.nome AS nome_caso,
+                d.tecnico_designado_id,
+                u_tec.username AS tecnico_designado,
+                d.registrado_por_id,
+                u_reg.username AS registrado_por,
+                d.created_at
+            FROM demandas d
+            LEFT JOIN casos c ON d.caso_associado_id = c.id
+            LEFT JOIN users u_tec ON d.tecnico_designado_id = u_tec.id
+            LEFT JOIN users u_reg ON d.registrado_por_id = u_reg.id
+            WHERE d.id = $1;
+        `;
+        const result = await pool.query(query, [id]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: "Demanda não encontrada." });
+        }
+
+        res.json(result.rows[0]);
+    } catch (err: any) {
+        console.error(`Erro ao buscar demanda ${id}:`, err.message);
+        res.status(500).json({ message: "Erro interno ao buscar a demanda." });
+    }
+});
+
 
 export default router;

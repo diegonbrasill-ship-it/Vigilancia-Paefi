@@ -13,7 +13,7 @@ import {
   getEncaminhamentos,
   createEncaminhamento,
   updateEncaminhamento,
-  getAnexos,
+  getAnexosByCasoId,
   uploadAnexo,
   downloadAnexo,
   updateCasoStatus,
@@ -115,7 +115,7 @@ export default function CasoDetalhe() {
           getCasoById(id),
           getAcompanhamentos(id),
           getEncaminhamentos(id),
-          getAnexos(id),
+          getAnexosByCasoId(id),
         ]);
       setCaso(casoData);
       setAcompanhamentos(acompanhamentosData);
