@@ -14,7 +14,7 @@ import {
   createEncaminhamento,
   updateEncaminhamento,
   getAnexosByCasoId,
-  uploadAnexo,
+  uploadAnexoParaCaso,
   downloadAnexo,
   updateCasoStatus,
   deleteCaso,
@@ -211,7 +211,7 @@ export default function CasoDetalhe() {
       const formData = new FormData();
       formData.append('anexo', selectedFile);
       formData.append('descricao', anexoDescricao);
-      await uploadAnexo(id, formData);
+      await uploadAnexoParaCaso(id, formData);
       toast.success("Arquivo enviado com sucesso!");
       setSelectedFile(null);
       setAnexoDescricao("");

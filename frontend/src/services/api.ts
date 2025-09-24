@@ -6,6 +6,12 @@ const API_BASE_URL = "http://localhost:4000";
 type LoginResponse = { message: string; token: string; user: { id: number; username: string; role: string; }; };
 type ChartData = { name: string; value: number; };
 
+export interface Anexo {
+    id: number;
+    nomeOriginal: string;
+    dataUpload: string;
+}
+
 export interface DashboardApiDataType {
     indicadores: {
         totalAtendimentos: number;
@@ -72,13 +78,12 @@ export interface Demanda {
 export interface DemandaDetalhada extends Demanda {
     numero_documento?: string;
     assunto?: string;
-    // 📌 CORREÇÃO: Adicionada a propriedade que estava faltando
-    caso_associado_id?: number; 
+    caso_associado_id?: number;
     tecnico_designado_id: number;
     registrado_por_id: number;
     created_at: string;
+    anexos: Anexo[];
 }
-
 
 // Função "Mestre" fetchWithAuth
 async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
@@ -148,7 +153,9 @@ export const updateEncaminhamento = (id: number, data: object) => fetchWithAuth(
 
 // ANEXOS
 export const getAnexosByCasoId = (casoId: string) => fetchWithAuth(`/api/anexos/casos/${casoId}`);
-export const uploadAnexo = (casoId: string, formData: FormData) => fetchWithAuth(`/api/anexos/upload/${casoId}`, { method: 'POST', body: formData });
+export const uploadAnexoParaCaso = (casoId: string | number, formData: FormData) => fetchWithAuth(`/api/anexos/upload/caso/${casoId}`, { method: 'POST', body: formData });
+// 📌 NOVA FUNÇÃO: Upload de anexo para uma DEMANDA
+export const uploadAnexoParaDemanda = (demandaId: string | number, formData: FormData) => fetchWithAuth(`/api/anexos/upload/demanda/${demandaId}`, { method: 'POST', body: formData });
 export async function downloadAnexo(anexoId: number): Promise<{ blob: Blob, filename: string }> {
     const response = await fetchWithAuth(`/api/anexos/download/${anexoId}`) as Response;
     const disposition = response.headers.get('content-disposition');
@@ -169,10 +176,7 @@ export const createUser = (data: object) => fetchWithAuth('/api/users', { method
 
 // RELATÓRIOS
 export async function generateReport(filters: { startDate: string, endDate: string }): Promise<Blob> {
-    const response = await fetchWithAuth('/api/relatorios/geral', { 
-        method: 'POST', 
-        body: JSON.stringify(filters) 
-    }) as Response;
+    const response = await fetchWithAuth('/api/relatorios/geral', { method: 'POST', body: JSON.stringify(filters) }) as Response;
     return response.blob();
 }
 
@@ -196,6 +200,5 @@ export const getVigilanciaPerfilViolacoes = () => fetchWithAuth('/api/vigilancia
 // DEMANDAS
 export const getDemandas = (): Promise<Demanda[]> => fetchWithAuth('/api/demandas');
 export const createDemanda = (demandaData: object): Promise<any> => fetchWithAuth('/api/demandas', { method: 'POST', body: JSON.stringify(demandaData) });
-export const getDemandaById = (id: string | number): Promise<DemandaDetalhada> => {
-    return fetchWithAuth(`/api/demandas/${id}`);
-};
+export const getDemandaById = (id: string | number): Promise<DemandaDetalhada> => fetchWithAuth(`/api/demandas/${id}`);
+export const updateDemandaStatus = (id: string | number, status: string): Promise<any> => fetchWithAuth(`/api/demandas/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });

@@ -1,7 +1,8 @@
+// backend/src/db.ts
 import { Pool } from "pg";
 import bcrypt from "bcryptjs";
 
-// Sua configuração de conexão, 100% preservada
+// Sua configuração de conexão
 const pool = new Pool({
   user: 'postgres',
   host: 'localhost',
@@ -105,9 +106,7 @@ export async function initDb() {
     `);
     console.log("Tabela 'anexos' verificada/criada.");
     
-    // ========================================================
-    // 📌 NOVA TABELA: demandas
-    // ========================================================
+    // Tabela 'demandas'
     await client.query(`
       CREATE TABLE IF NOT EXISTS demandas (
         id SERIAL PRIMARY KEY,
@@ -126,33 +125,36 @@ export async function initDb() {
     `);
     console.log("Tabela 'demandas' verificada/criada.");
 
-    // Ajuste na tabela 'anexos' para permitir anexos em demandas
-    // Usamos ALTER TABLE para adicionar a coluna sem apagar a tabela.
+    // Ajustes na tabela 'anexos' para o novo módulo
     await client.query(`
       ALTER TABLE anexos
       ADD COLUMN IF NOT EXISTS "demandaId" INTEGER REFERENCES demandas(id) ON DELETE CASCADE;
     `);
-    console.log("Tabela 'anexos' verificada/atualizada com coluna para demandas.");
+    
+    // ========================================================
+    // 📌 CORREÇÃO: Permitindo que 'casoId' seja nulo na tabela de anexos.
+    // Isso é necessário para que um anexo possa pertencer a uma Demanda sem pertencer a um Caso.
+    // ========================================================
+    await client.query(`
+      ALTER TABLE anexos
+      ALTER COLUMN "casoId" DROP NOT NULL;
+    `);
+    console.log("Tabela 'anexos' atualizada: 'casoId' agora permite valores nulos.");
 
-    // =============================
     // ÍNDICE GIN PARA PERFORMANCE
-    // =============================
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_casos_dados_completos_gin
       ON casos USING GIN (dados_completos);
     `);
     console.log("Índice GIN em 'casos.dados_completos' verificado/criado.");
 
-    // ========================================================
     // SEED DE USUÁRIOS
-    // ========================================================
     const seeds = [
       { username: "coordenador", password: "senha123", role: "coordenador" },
       { username: "gestor", password: "senha123", role: "gestor" },
       { username: "tecnico", password: "senha123", role: "tecnico" },
       { username: "vigilancia", password: "senha123", role: "vigilancia" }
     ];
-
     for (const s of seeds) {
       const res = await client.query("SELECT id FROM users WHERE username = $1", [s.username]);
       if (res.rowCount === 0) {

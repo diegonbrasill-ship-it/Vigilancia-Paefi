@@ -3,21 +3,20 @@
 import express, { Request, Response } from 'express';
 import pool from '../db';
 import { authMiddleware } from '../middleware/auth';
-import upload from '../middleware/upload'; // Importamos nossa configuração do multer
+import upload from '../middleware/upload';
 import { logAction } from '../services/logger';
 import path from 'path';
 import fs from 'fs';
 
 const router = express.Router();
 
-/**
- * @route   POST /api/anexos/upload/:casoId
- * @desc    Faz o upload de um novo anexo para um caso específico
- * @access  Private
- */
+router.use(authMiddleware); // Protege todas as rotas de anexo
+
+// =======================================================================
+// ROTA ANTIGA (mantida): Upload de anexo para um CASO
+// =======================================================================
 router.post(
-  '/upload/:casoId', 
-  authMiddleware, 
+  '/upload/caso/:casoId', 
   upload.single('anexo'), 
   async (req: Request, res: Response) => {
     
@@ -27,10 +26,8 @@ router.post(
 
     const { casoId } = req.params;
     const { descricao } = req.body;
-    const userId = req.user!.id;
-    const username = req.user!.username;
-
-    const { originalname, filename, path, mimetype, size } = req.file;
+    const { id: userId, username } = req.user!;
+    const { originalname, filename, path: filePath, mimetype, size } = req.file;
 
     try {
       const query = `
@@ -40,15 +37,15 @@ router.post(
           ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING id, "nomeOriginal";
       `;
-
       const result = await pool.query(query, [
-        casoId, userId, originalname, filename, path, mimetype, size, descricao
+        casoId, userId, originalname, filename, filePath, mimetype, size, descricao
       ]);
       const novoAnexo = result.rows[0];
+
       await logAction({
         userId,
         username,
-        action: 'UPLOAD_ANEXO',
+        action: 'UPLOAD_CASE_ATTACHMENT',
         details: { casoId, anexoId: novoAnexo.id, nomeArquivo: novoAnexo.nomeOriginal }
       });
 
@@ -60,24 +57,58 @@ router.post(
 });
 
 // =======================================================================
-// NOVA ROTA PARA LISTAR OS ANEXOS DE UM CASO
+// 📌 NOVA ROTA: Upload de anexo para uma DEMANDA
 // =======================================================================
-/**
- * @route   GET /api/anexos/casos/:casoId
- * @desc    Lista todos os anexos de um caso específico
- * @access  Private
- */
-router.get('/casos/:casoId', authMiddleware, async (req: Request, res: Response) => {
+router.post(
+    '/upload/demanda/:demandaId',
+    upload.single('anexo'),
+    async (req: Request, res: Response) => {
+        if (!req.file) {
+            return res.status(400).json({ message: 'Nenhum arquivo foi enviado.' });
+        }
+
+        const { demandaId } = req.params;
+        const { descricao } = req.body;
+        const { id: userId, username } = req.user!;
+        const { originalname, filename, path: filePath, mimetype, size } = req.file;
+
+        try {
+            const query = `
+                INSERT INTO anexos
+                  ("demandaId", "userId", "nomeOriginal", "nomeArmazenado", "caminhoArquivo", "tipoArquivo", "tamanhoArquivo", descricao)
+                VALUES
+                  ($1, $2, $3, $4, $5, $6, $7, $8)
+                RETURNING id, "nomeOriginal";
+            `;
+            const result = await pool.query(query, [
+                demandaId, userId, originalname, filename, filePath, mimetype, size, descricao
+            ]);
+            const novoAnexo = result.rows[0];
+
+            await logAction({
+                userId,
+                username,
+                action: 'UPLOAD_DEMAND_ATTACHMENT',
+                details: { demandaId, anexoId: novoAnexo.id, nomeArquivo: novoAnexo.nomeOriginal }
+            });
+
+            res.status(201).json({ message: 'Arquivo enviado com sucesso!', anexo: novoAnexo });
+        } catch (err: any) {
+            console.error(`Erro ao anexar arquivo à demanda ${demandaId}:`, err.message);
+            res.status(500).json({ message: 'Erro no servidor ao registrar o anexo.' });
+        }
+    }
+);
+
+
+// ROTA para listar os anexos de um CASO
+router.get('/casos/:casoId', async (req: Request, res: Response) => {
   const { casoId } = req.params;
   try {
     const query = `
       SELECT
-        anex.id,
-        anex."nomeOriginal",
-        anex."tamanhoArquivo",
-        anex."dataUpload",
-        anex.descricao,
-        usr.username AS "uploadedBy"
+        anex.id, anex."nomeOriginal", anex."tamanhoArquivo",
+        anex."dataUpload", anex.descricao, usr.username AS "uploadedBy"
       FROM anexos anex
       LEFT JOIN users usr ON anex."userId" = usr.id
       WHERE anex."casoId" = $1
@@ -91,19 +122,10 @@ router.get('/casos/:casoId', authMiddleware, async (req: Request, res: Response)
   }
 });
 
-
-// =======================================================================
-// NOVA ROTA PARA PERMITIR O DOWNLOAD DE UM ANEXO
-// =======================================================================
-/**
- * @route   GET /api/anexos/download/:id
- * @desc    Faz o download de um anexo específico
- * @access  Private
- */
-router.get('/download/:id', authMiddleware, async (req: Request, res: Response) => {
+// ROTA para permitir o DOWNLOAD de um anexo
+router.get('/download/:id', async (req: Request, res: Response) => {
   const { id } = req.params;
   try {
-    // 1. Busca as informações do arquivo no banco de dados
     const query = `SELECT "caminhoArquivo", "nomeOriginal" FROM anexos WHERE id = $1`;
     const result = await pool.query(query, [id]);
 
@@ -112,17 +134,17 @@ router.get('/download/:id', authMiddleware, async (req: Request, res: Response) 
     }
 
     const anexo = result.rows[0];
-    const filePath = path.join(__dirname, '..', '..', anexo.caminhoArquivo);
+    // Caminho relativo à raiz do projeto, não ao diretório 'dist'
+    const filePath = path.resolve(anexo.caminhoArquivo);
 
-    // 2. Verifica se o arquivo realmente existe no disco
     if (fs.existsSync(filePath)) {
-      // 3. Usa a função res.download() do Express, que cuida de tudo para nós
       res.download(filePath, anexo.nomeOriginal, (err) => {
         if (err) {
           console.error('Erro durante o download do arquivo:', err);
         }
       });
     } else {
+      console.error(`Arquivo não encontrado no disco: ${filePath}`);
       res.status(404).json({ message: 'Arquivo não encontrado no servidor.' });
     }
   } catch (err: any) {
