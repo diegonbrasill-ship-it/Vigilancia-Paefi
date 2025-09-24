@@ -32,7 +32,16 @@ export async function initDb() {
         role TEXT NOT NULL
       );
     `);
-    console.log("Tabela 'users' verificada/criada.");
+    
+    // Adicionando as colunas de perfil
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS nome_completo TEXT;`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS cargo TEXT;`);
+    
+    // ========================================================
+    // 📌 1. ADICIONANDO A NOVA COLUNA DE STATUS À TABELA 'users'
+    // ========================================================
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT true;`);
+    console.log("Tabela 'users' verificada/atualizada com a coluna 'is_active'.");
     
     // Tabela 'casos'
     await client.query(`
@@ -125,46 +134,50 @@ export async function initDb() {
     `);
     console.log("Tabela 'demandas' verificada/criada.");
 
-    // Ajustes na tabela 'anexos' para o novo módulo
-    await client.query(`
-      ALTER TABLE anexos
-      ADD COLUMN IF NOT EXISTS "demandaId" INTEGER REFERENCES demandas(id) ON DELETE CASCADE;
-    `);
-    
-    // ========================================================
-    // 📌 CORREÇÃO: Permitindo que 'casoId' seja nulo na tabela de anexos.
-    // Isso é necessário para que um anexo possa pertencer a uma Demanda sem pertencer a um Caso.
-    // ========================================================
-    await client.query(`
-      ALTER TABLE anexos
-      ALTER COLUMN "casoId" DROP NOT NULL;
-    `);
-    console.log("Tabela 'anexos' atualizada: 'casoId' agora permite valores nulos.");
+    // Ajustes na tabela 'anexos'
+    await client.query(`ALTER TABLE anexos ADD COLUMN IF NOT EXISTS "demandaId" INTEGER REFERENCES demandas(id) ON DELETE CASCADE;`);
+    await client.query(`ALTER TABLE anexos ALTER COLUMN "casoId" DROP NOT NULL;`);
+    console.log("Tabela 'anexos' atualizada: 'casoId' agora permite nulos e 'demandaId' existe.");
 
-    // ÍNDICE GIN PARA PERFORMANCE
+    // ÍNDICE GIN
     await client.query(`
       CREATE INDEX IF NOT EXISTS idx_casos_dados_completos_gin
       ON casos USING GIN (dados_completos);
     `);
     console.log("Índice GIN em 'casos.dados_completos' verificado/criado.");
 
-    // SEED DE USUÁRIOS
+    // ========================================================
+    // 📌 2. ATUALIZAÇÃO DO SEED DE USUÁRIOS COM O CAMPO 'is_active'
+    // ========================================================
     const seeds = [
-      { username: "coordenador", password: "senha123", role: "coordenador" },
-      { username: "gestor", password: "senha123", role: "gestor" },
-      { username: "tecnico", password: "senha123", role: "tecnico" },
-      { username: "vigilancia", password: "senha123", role: "vigilancia" }
+      { username: "coordenador", password: "senha123", role: "coordenador", nome_completo: "Maria Souza", cargo: "Coordenadora do CREAS" },
+      { username: "gestor", password: "senha123", role: "gestor", nome_completo: "Carlos Andrade", cargo: "Gestor da Proteção Social" },
+      { username: "tecnico", password: "senha123", role: "tecnico", nome_completo: "João Paulo", cargo: "Psicólogo" },
+      { username: "vigilancia", password: "senha123", role: "vigilancia", nome_completo: "Ana Costa", cargo: "Vigilância Socioassistencial" }
     ];
+
     for (const s of seeds) {
       const res = await client.query("SELECT id FROM users WHERE username = $1", [s.username]);
       if (res.rowCount === 0) {
         const hash = await bcrypt.hash(s.password, 10);
-        await client.query("INSERT INTO users (username, passwordHash, role) VALUES ($1, $2, $3)", 
-          [s.username, hash, s.role]
+        await client.query(
+          // Adicionado 'is_active' na criação do usuário
+          `INSERT INTO users (username, passwordHash, role, nome_completo, cargo, is_active) 
+           VALUES ($1, $2, $3, $4, $5, true)`, 
+          [s.username, hash, s.role, s.nome_completo, s.cargo]
         );
         console.log(`Usuário '${s.username}' criado.`);
+      } else {
+        // Garante que usuários existentes também tenham nome e cargo (sem alterar is_active)
+        await client.query(
+          `UPDATE users SET nome_completo = $1, cargo = $2 
+           WHERE username = $3 AND (nome_completo IS NULL OR cargo IS NULL)`,
+          [s.nome_completo, s.cargo, s.username]
+        );
       }
     }
+    console.log("Seed de usuários verificado/atualizado.");
+
 
     isDbInitialized = true;
   } catch (err: any) {

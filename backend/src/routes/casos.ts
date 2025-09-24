@@ -82,7 +82,6 @@ router.put("/:id", authMiddleware, async (req: Request, res: Response) => {
 
 router.get("/", authMiddleware, async (req: Request, res: Response) => {
   const user = req.user!;
-  // 1. ADICIONADO: Novo parâmetro 'q' para busca genérica
   const { q, tecRef, filtro, valor, status = 'Ativo' } = req.query;
 
   try {
@@ -100,10 +99,8 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
         whereClauses.push(`"tecRef" ILIKE $${params.length}`);
     }
     
-    // 2. ADICIONADO: Lógica para a busca genérica por Nome ou NIS
     if (q && typeof q === 'string') {
         params.push(`%${q}%`);
-        // Procura no campo 'nome' OU no campo 'nis' dentro do JSONB
         whereClauses.push(`(nome ILIKE $${params.length} OR dados_completos->>'nis' ILIKE $${params.length})`);
     }
 
@@ -113,7 +110,6 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
                 whereClauses = whereClauses.filter(c => !c.startsWith('status'));
                 if (params.includes('Ativo')) params.splice(params.indexOf('Ativo'), 1);
                 break;
-            // (O restante do switch case continua o mesmo)
             case 'novos_no_mes': whereClauses.push(`"dataCad" >= date_trunc('month', current_date)`); break;
             case 'reincidentes': whereClauses.push(`LOWER(dados_completos->>'reincidente') = 'sim'`); break;
             case 'inseridos_paefi': whereClauses.push(`LOWER(dados_completos->>'inseridoPAEFI') = 'sim'`); break;
@@ -164,18 +160,37 @@ router.get("/:id", authMiddleware, async (req: Request, res: Response) => {
     const { id } = req.params;
     const user = req.user!;
     try {
-        let query = 'SELECT * FROM casos WHERE id = $1';
-        const params: (string | number)[] = [id];
-        const result = await pool.query(query, params);
-        if (result.rowCount === 0) {
-            return res.status(404).json({ message: "Caso não encontrado ou você não tem permissão para vê-lo." });
+        // Primeira consulta: busca os dados do caso
+        const casoQuery = 'SELECT * FROM casos WHERE id = $1';
+        const casoResult = await pool.query(casoQuery, [id]);
+        
+        if (casoResult.rowCount === 0) {
+            return res.status(404).json({ message: "Caso não encontrado." });
         }
-        const casoBase = result.rows[0];
+        
+        const casoBase = casoResult.rows[0];
+        
+        // 📌 NOVA CONSULTA: Busca as demandas vinculadas a este caso
+        const demandasQuery = `
+            SELECT id, tipo_documento, instituicao_origem, data_recebimento, status 
+            FROM demandas 
+            WHERE caso_associado_id = $1 
+            ORDER BY data_recebimento DESC
+        `;
+        const demandasResult = await pool.query(demandasQuery, [id]);
+
+        // Combina os dados do caso com suas demandas vinculadas
         const casoCompleto = {
             ...casoBase.dados_completos,
-            id: casoBase.id, dataCad: casoBase.dataCad, tecRef: casoBase.tecRef,
-            nome: casoBase.nome, userId: casoBase.userId, status: casoBase.status
+            id: casoBase.id,
+            dataCad: casoBase.dataCad,
+            tecRef: casoBase.tecRef,
+            nome: casoBase.nome,
+            userId: casoBase.userId,
+            status: casoBase.status,
+            demandasVinculadas: demandasResult.rows // 📌 Adiciona a lista de demandas à resposta
         };
+        
         const dadosProcessados = anonimizarDadosSeNecessario(user, casoCompleto);
         res.json(dadosProcessados);
     } catch (err: any) {
@@ -200,9 +215,7 @@ router.patch("/:id/status", authMiddleware, async (req: Request, res: Response) 
             return res.status(404).json({ message: 'Caso não encontrado.' });
         }
         await logAction({
-            userId,
-            username,
-            action: 'UPDATE_CASE_STATUS',
+            userId, username, action: 'UPDATE_CASE_STATUS',
             details: { casoId: id, nomeVitima: result.rows[0].nome, novoStatus: status }
         });
         res.status(200).json({ message: `Caso ${id} foi atualizado para '${status}' com sucesso.` });

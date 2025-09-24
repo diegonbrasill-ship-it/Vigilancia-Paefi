@@ -12,6 +12,15 @@ export interface Anexo {
     dataUpload: string;
 }
 
+export interface User {
+    id: number;
+    username: string;
+    role: string;
+    nome_completo: string;
+    cargo: string;
+    is_active: boolean;
+}
+
 export interface DashboardApiDataType {
     indicadores: {
         totalAtendimentos: number;
@@ -62,6 +71,27 @@ interface FiltrosCasos {
     mes?: string;
 }
 
+export interface DemandaResumida {
+    id: number;
+    tipo_documento: string;
+    instituicao_origem: string;
+    data_recebimento: string;
+    status: string;
+}
+
+export interface CasoDetalhado {
+    // Inclui todos os campos de um caso que já tínhamos
+    id: number;
+    nome: string;
+    dataCad: string;
+    tecRef: string;
+    status: string;
+    // e mais... (todos os outros campos do 'dados_completos')
+    [key: string]: any; // Permite outros campos dinâmicos
+    
+    // E o mais importante: a nova lista de demandas
+    demandasVinculadas: DemandaResumida[];
+}
 export interface Demanda {
     id: number;
     tipo_documento: string;
@@ -126,7 +156,7 @@ export const createCase = (casoData: any) => fetchWithAuth('/api/casos', { metho
 export const updateCase = (id: number | string, casoData: any) => fetchWithAuth(`/api/casos/${id}`, { method: 'PUT', body: JSON.stringify(casoData) });
 export const updateCasoStatus = (casoId: string | number, status: string) => fetchWithAuth(`/api/casos/${casoId}/status`, { method: 'PATCH', body: JSON.stringify({ status }) });
 export const deleteCaso = (casoId: string | number) => fetchWithAuth(`/api/casos/${casoId}`, { method: 'DELETE' });
-export const getCasoById = (id: string) => fetchWithAuth(`/api/casos/${id}`);
+export const getCasoById = (id: string): Promise<CasoDetalhado> => fetchWithAuth(`/api/casos/${id}`);
 export const getCasosFiltrados = (filters?: FiltrosCasos): Promise<any[]> => {
     const params = new URLSearchParams();
     if (filters) {
@@ -173,7 +203,9 @@ export async function downloadAnexo(anexoId: number): Promise<{ blob: Blob, file
 // USUÁRIOS
 export const getUsers = () => fetchWithAuth('/api/users');
 export const createUser = (data: object) => fetchWithAuth('/api/users', { method: 'POST', body: JSON.stringify(data) });
-
+export const updateUser = (id: number, data: Partial<User>) => fetchWithAuth(`/api/users/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+export const updateUserStatus = (id: number, isActive: boolean) => fetchWithAuth(`/api/users/${id}/status`, { method: 'PATCH', body: JSON.stringify({ isActive }) });
+export const reassignUserCases = (fromUserId: number, toUserId: number) => fetchWithAuth('/api/users/reatribuir', { method: 'POST', body: JSON.stringify({ fromUserId, toUserId }) });
 // RELATÓRIOS
 export async function generateReport(filters: { startDate: string, endDate: string }): Promise<Blob> {
     const response = await fetchWithAuth('/api/relatorios/geral', { method: 'POST', body: JSON.stringify(filters) }) as Response;

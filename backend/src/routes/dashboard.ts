@@ -7,7 +7,6 @@ import { QueryResult } from "pg";
 
 const router = Router();
 
-// A função buildWhereClause está correta e será mantida.
 const buildWhereClause = (filters: { mes?: string, tecRef?: string, bairro?: string }): [string, any[]] => {
     const whereClauses: string[] = [];
     const params: any[] = [];
@@ -38,14 +37,15 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
         const { mes, tecRef, bairro } = req.query as { mes?: string, tecRef?: string, bairro?: string };
         const [whereClause, params] = buildWhereClause({ mes, tecRef, bairro });
 
-        // Constrói a segunda parte da cláusula para queries que já têm um "WHERE"
         const andClause = whereClause.length > 0 ? `AND ${whereClause.substring(6)}` : '';
 
         const queries = [
             // 0 - Indicadores: Total de Atendimentos
             pool.query(`SELECT COUNT(id) AS total FROM casos ${whereClause}`, params),
-            // 1 - Indicadores: Novos no Mês (ignora filtros)
-            pool.query(`SELECT COUNT(id) AS total FROM casos WHERE "dataCad" >= date_trunc('month', CURRENT_DATE)`),
+            
+            // 1. CORREÇÃO: A query para "Novos no Mês" agora também aplica os filtros
+            pool.query(`SELECT COUNT(id) AS total FROM casos WHERE "dataCad" >= date_trunc('month', CURRENT_DATE) ${andClause}`, params),
+
             // 2 - Indicadores: Inseridos no PAEFI
             pool.query(`SELECT COUNT(id) AS total FROM casos WHERE dados_completos->>'inseridoPAEFI' = 'Sim' ${andClause}`, params),
             // 3 - Indicadores: Reincidentes
@@ -122,7 +122,7 @@ router.get("/", authMiddleware, async (req: Request, res: Response) => {
             },
             opcoesFiltro: {
                 meses: results[20].rows.map((r: any) => r.mes),
-                tecnicos: results[21].rows.map((r: any) => r.tecref),
+                tecnicos: results[21].rows.map((r: any) => r.tecRef),
                 bairros: results[22].rows.map((r: any) => r.bairro),
             }
         };

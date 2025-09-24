@@ -2,35 +2,29 @@
 
 import { useState, useEffect } from 'react';
 import { toast } from 'react-toastify';
-import { getUsers, createUser } from '../services/api';
+import { getUsers, createUser, updateUserStatus, reassignUserCases, User } from '../services/api';
 
-// Componentes UI
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, UserPlus } from 'lucide-react';
-
-// Tipagem para o objeto de usuário
-interface User {
-  id: number;
-  username: string;
-  role: string;
-}
+import { Badge } from '@/components/ui/badge';
+import { Loader2, UserPlus, Edit, Power, PowerOff, Users as UsersIcon } from 'lucide-react';
+import UserEditModal from '@/components/users/UserEditModal';
+import ReassignCasesModal from '@/components/users/ReassignCasesModal';
 
 export default function GerenciarUsuarios() {
   const [users, setUsers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [newUser, setNewUser] = useState({ username: '', password: '', role: '', nome_completo: '', cargo: '' });
+  
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isReassignModalOpen, setIsReassignModalOpen] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
-  // Estados para o formulário de novo usuário
-  const [newUsername, setNewUsername] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [newRole, setNewRole] = useState('');
-
-  // Função para buscar a lista de usuários
   const fetchUsers = async () => {
     try {
       const usersData = await getUsers();
@@ -42,35 +36,60 @@ export default function GerenciarUsuarios() {
     }
   };
 
-  // Busca os usuários quando a página carrega
   useEffect(() => {
+    setIsLoading(true);
     fetchUsers();
   }, []);
 
-  // Função para lidar com a criação de um novo usuário
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setNewUser(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleRoleChange = (value: string) => {
+    setNewUser(prev => ({ ...prev, role: value }));
+  };
+
   const handleCreateUser = async () => {
-    if (!newUsername || !newPassword || !newRole) {
+    if (!newUser.username || !newUser.password || !newUser.role || !newUser.nome_completo || !newUser.cargo) {
       toast.warn('Todos os campos são obrigatórios.');
       return;
     }
     setIsSaving(true);
     try {
-      await createUser({
-        username: newUsername,
-        password: newPassword,
-        role: newRole,
-      });
-      toast.success(`Usuário "${newUsername}" criado com sucesso!`);
-      // Limpa o formulário e recarrega a lista
-      setNewUsername('');
-      setNewPassword('');
-      setNewRole('');
+      await createUser(newUser);
+      toast.success(`Usuário "${newUser.username}" criado com sucesso!`);
+      setNewUser({ username: '', password: '', role: '', nome_completo: '', cargo: '' });
       fetchUsers();
     } catch (error: any) {
       toast.error(`Erro ao criar usuário: ${error.message}`);
     } finally {
       setIsSaving(false);
     }
+  };
+  
+  const handleToggleUserStatus = async (user: User) => {
+    const action = user.is_active ? 'desativar' : 'reativar';
+    if (!window.confirm(`Você tem certeza que deseja ${action} o usuário ${user.username}?`)) {
+      return;
+    }
+    try {
+        await updateUserStatus(user.id, !user.is_active);
+        toast.success(`Usuário ${action} com sucesso!`);
+        fetchUsers();
+    } catch (error: any) {
+        toast.error(`Falha ao ${action} usuário: ${error.message}`);
+    }
+  };
+
+  const openEditModal = (user: User) => {
+    setSelectedUser(user);
+    setIsEditModalOpen(true);
+  };
+  
+  const openReassignModal = (user: User) => {
+    setSelectedUser(user);
+    setIsReassignModalOpen(true);
   };
 
   if (isLoading) {
@@ -80,53 +99,20 @@ export default function GerenciarUsuarios() {
   return (
     <div className="space-y-6">
       <h1 className="text-3xl font-bold">Gestão de Usuários</h1>
-      <p className="text-slate-500">
-        Crie e gerencie as contas de acesso para a equipe do PAEFI e da Vigilância.
-      </p>
+      <p className="text-slate-500">Crie, edite e gerencie as contas de acesso para a equipe do RMSUAS.</p>
 
-      {/* Card de Criação de Usuário */}
       <Card>
         <CardHeader>
           <CardTitle>Criar Novo Usuário</CardTitle>
-          <CardDescription>
-            Preencha os dados para criar uma nova credencial de acesso ao sistema.
-          </CardDescription>
+          <CardDescription>Preencha os dados para criar uma nova credencial de acesso.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Nome de Usuário</Label>
-              <Input 
-                id="username" 
-                placeholder="ex: maria.silva"
-                value={newUsername}
-                onChange={(e) => setNewUsername(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="password">Senha Provisória</Label>
-              <Input 
-                id="password" 
-                type="password" 
-                placeholder="••••••••"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="role">Perfil de Acesso</Label>
-              <Select value={newRole} onValueChange={setNewRole}>
-                <SelectTrigger id="role">
-                  <SelectValue placeholder="Selecione um perfil..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="tecnico">Técnico</SelectItem>
-                  <SelectItem value="coordenador">Coordenador</SelectItem>
-                  <SelectItem value="gestor">Gestor</SelectItem>
-                  <SelectItem value="vigilancia">Vigilância</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="grid md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <div className="space-y-2"><Label htmlFor="nome_completo">Nome Completo</Label><Input name="nome_completo" placeholder="Ex: João Paulo da Silva" value={newUser.nome_completo} onChange={handleInputChange} /></div>
+            <div className="space-y-2"><Label htmlFor="cargo">Cargo/Função</Label><Input name="cargo" placeholder="Ex: Psicólogo, Assistente Social" value={newUser.cargo} onChange={handleInputChange} /></div>
+            <div className="space-y-2"><Label htmlFor="username">Nome de Usuário</Label><Input name="username" placeholder="ex: joao.silva" value={newUser.username} onChange={handleInputChange} /></div>
+            <div className="space-y-2"><Label htmlFor="password">Senha Provisória</Label><Input name="password" type="password" placeholder="••••••••" value={newUser.password} onChange={handleInputChange} /></div>
+            <div className="space-y-2"><Label htmlFor="role">Perfil de Acesso</Label><Select value={newUser.role} onValueChange={handleRoleChange}><SelectTrigger id="role"><SelectValue placeholder="Selecione..." /></SelectTrigger><SelectContent><SelectItem value="tecnico">Técnico</SelectItem><SelectItem value="coordenador">Coordenador</SelectItem><SelectItem value="gestor">Gestor</SelectItem><SelectItem value="vigilancia">Vigilância</SelectItem></SelectContent></Select></div>
           </div>
           <Button onClick={handleCreateUser} disabled={isSaving}>
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />}
@@ -135,30 +121,41 @@ export default function GerenciarUsuarios() {
         </CardContent>
       </Card>
 
-      {/* Card da Lista de Usuários */}
       <Card>
-        <CardHeader>
-          <CardTitle>Usuários Cadastrados</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Usuários Cadastrados</CardTitle></CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>Nome de Usuário</TableHead>
+                <TableHead>Nome Completo</TableHead>
+                <TableHead>Cargo</TableHead>
+                <TableHead>Usuário</TableHead>
                 <TableHead>Perfil</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {users.map((user) => (
                 <TableRow key={user.id}>
-                  <TableCell>{user.id}</TableCell>
-                  <TableCell className="font-medium">{user.username}</TableCell>
+                  <TableCell className="font-medium">{user.nome_completo}</TableCell>
+                  <TableCell>{user.cargo}</TableCell>
+                  <TableCell>{user.username}</TableCell>
                   <TableCell className="capitalize">{user.role}</TableCell>
-                  <TableCell className="text-right">
-                    {/* Botões de Ação (Resetar Senha, Editar) podem ser adicionados aqui no futuro */}
-                    <Button variant="outline" size="sm" disabled>Editar</Button>
+                  <TableCell><Badge variant={user.is_active ? 'default' : 'destructive'}>{user.is_active ? 'Ativo' : 'Inativo'}</Badge></TableCell>
+                  <TableCell className="text-right space-x-2">
+                    <Button variant="outline" size="sm" onClick={() => openEditModal(user)}>
+                        <Edit className="mr-2 h-4 w-4" /> Editar
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => handleToggleUserStatus(user)}>
+                        {user.is_active ? <PowerOff className="mr-2 h-4 w-4 text-red-500" /> : <Power className="mr-2 h-4 w-4 text-green-500" />}
+                        {user.is_active ? 'Desativar' : 'Reativar'}
+                    </Button>
+                    {!user.is_active && (
+                         <Button variant="secondary" size="sm" onClick={() => openReassignModal(user)}>
+                            <UsersIcon className="mr-2 h-4 w-4" /> Reatribuir Casos
+                        </Button>
+                    )}
                   </TableCell>
                 </TableRow>
               ))}
@@ -166,6 +163,26 @@ export default function GerenciarUsuarios() {
           </Table>
         </CardContent>
       </Card>
+      
+      <UserEditModal
+        user={selectedUser}
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        onSuccess={() => {
+            setIsEditModalOpen(false);
+            fetchUsers();
+        }}
+      />
+      <ReassignCasesModal
+        fromUser={selectedUser}
+        allUsers={users}
+        isOpen={isReassignModalOpen}
+        onClose={() => setIsReassignModalOpen(false)}
+        onSuccess={() => {
+            setIsReassignModalOpen(false);
+            fetchUsers();
+        }}
+      />
     </div>
   );
 }
